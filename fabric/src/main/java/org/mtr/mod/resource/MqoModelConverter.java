@@ -182,8 +182,13 @@ public final class MqoModelConverter {
 					}
 				}
 
+				String lastMaterialName = null;
 				for (final Triangle triangle : triangles) {
-					objBuilder.append("usemtl ").append(triangle.materialIndex >= 0 && triangle.materialIndex < materials.size() ? getMaterialName(triangle.materialIndex) : "mqo_default").append('\n');
+					final String materialName = triangle.materialIndex >= 0 && triangle.materialIndex < materials.size() ? getMaterialName(triangle.materialIndex) : "mqo_default";
+					if (!materialName.equals(lastMaterialName)) {
+						objBuilder.append("usemtl ").append(materialName).append('\n');
+						lastMaterialName = materialName;
+					}
 					for (int i = 0; i < 3; i++) {
 						if (triangle.hasUv) {
 							objBuilder.append(String.format(Locale.US, "vt %.6f %.6f%n", triangle.u[i], triangle.v[i]));

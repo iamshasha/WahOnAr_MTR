@@ -93,6 +93,31 @@ public final class MqoModelConverterTest {
 	}
 
 	@Test
+	public void onlyWriteUsemtlWhenMaterialChanges() {
+		final MqoModelConverter.ConvertedModel convertedModel = MqoModelConverter.convert(mqo(
+				"Metasequoia Document",
+				"Format Text Ver 1.1",
+				"Material 1 {",
+				"	\"body\"",
+				"}",
+				"Object \"body\" {",
+				"	vertex 4 {",
+				"		0 0 0",
+				"		1 0 0",
+				"		1 1 0",
+				"		0 1 0",
+				"	}",
+				"	face 2 {",
+				"		3 V(0 1 2) M(0)",
+				"		3 V(0 2 3) M(0)",
+				"	}",
+				"}"
+		));
+
+		Assertions.assertEquals(1, convertedModel.getObjContent().split("usemtl mqo_material_0", -1).length - 1);
+	}
+
+	@Test
 	public void convertSmoothNormals() {
 		final MqoModelConverter.ConvertedModel convertedModel = MqoModelConverter.convert(mqo(
 				"Metasequoia Document",
