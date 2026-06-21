@@ -142,6 +142,51 @@ public final class MqoModelConverterTest {
 	}
 
 	@Test
+	public void preserveObjectNameCharactersInsideQuotes() {
+		final MqoModelConverter.ConvertedModel convertedModel = MqoModelConverter.convert(mqo(
+				"Metasequoia Document",
+				"Format Text Ver 1.1",
+				"Object \"body { section}\\\" {",
+				"	vertex 3 {",
+				"		0 0 0",
+				"		1 0 0",
+				"		0 1 0",
+				"	}",
+				"	face 1 {",
+				"		3 V(0 1 2)",
+				"	}",
+				"}"
+		));
+
+		Assertions.assertEquals("body { section}\\", convertedModel.getModelParts().get(0));
+		Assertions.assertTrue(convertedModel.getObjContent().contains("o body { section}\\"));
+		Assertions.assertTrue(convertedModel.getObjContent().contains("g body { section}\\"));
+	}
+
+	@Test
+	public void preserveBackslashesInTexturePath() {
+		final MqoModelConverter.ConvertedModel convertedModel = MqoModelConverter.convert(mqo(
+				"Metasequoia Document",
+				"Format Text Ver 1.1",
+				"Material 1 {",
+				"	\"window\" tex(\"textures\\\\cars\\\\window.png\")",
+				"}",
+				"Object \"window\" {",
+				"	vertex 3 {",
+				"		0 0 0",
+				"		1 0 0",
+				"		0 1 0",
+				"	}",
+				"	face 1 {",
+				"		3 V(0 1 2) M(0)",
+				"	}",
+				"}"
+		));
+
+		Assertions.assertTrue(convertedModel.getMtlContent().contains("map_Kd textures\\\\cars\\\\window.png"));
+	}
+
+	@Test
 	public void ignoreUnknownObjectChildChunks() {
 		final MqoModelConverter.ConvertedModel convertedModel = MqoModelConverter.convert(mqo(
 				"Metasequoia Document",
