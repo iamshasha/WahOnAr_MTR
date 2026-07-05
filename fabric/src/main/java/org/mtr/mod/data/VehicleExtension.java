@@ -1,9 +1,6 @@
 package org.mtr.mod.data;
 
-import org.mtr.core.data.Data;
-import org.mtr.core.data.PathData;
-import org.mtr.core.data.Vehicle;
-import org.mtr.core.data.VehicleCar;
+import org.mtr.core.data.*;
 import org.mtr.core.operation.VehicleUpdate;
 import org.mtr.core.serializer.JsonReader;
 import org.mtr.core.tool.Utilities;
@@ -296,7 +293,11 @@ public class VehicleExtension extends Vehicle implements Utilities {
 
 	public ObjectArrayList<ObjectObjectImmutablePair<VehicleCar, ObjectArrayList<ObjectObjectImmutablePair<Vector, Vector>>>> getSmoothedVehicleCarsAndPositions(long millisElapsed) {
 		final double oldRailProgress = railProgress;
-		railProgress = persistentVehicleData.getSmoothedRailProgress(railProgress, persistentVehicleData.getDoorValue() > 0 ? 0 : millisElapsed * (speed == 0 ? Integer.MAX_VALUE : speed / 10));
+		railProgress = persistentVehicleData.getSmoothedRailProgress(
+				railProgress,
+				persistentVehicleData.getDoorValue() > 0 ? 0 : millisElapsed * Math.max(Siding.ACCELERATION_DEFAULT, speed / 10),
+				!closeToDepot() && railProgress > vehicleExtraData.getStoppingPoint() ? vehicleExtraData.getStoppingPoint() : null
+		);
 		final ObjectArrayList<ObjectObjectImmutablePair<VehicleCar, ObjectArrayList<ObjectObjectImmutablePair<Vector, Vector>>>> vehicleCarsAndPositions = getVehicleCarsAndPositions();
 		railProgress = oldRailProgress;
 		return vehicleCarsAndPositions;
