@@ -1,0 +1,186 @@
+import mtr.data.DepartureLedger;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+/**
+ * Drives the dispatch gate over a simulated clock and asserts that one departure gets exactly one train.
+ *
+ * The bug this exists for: the depot used to remember only the most recent booked departure. Sidings have
+ * different lead times, so they read the timetable from different moments and their bookings interleave — a
+ * long-lead siding books 09:05 while a short-lead siding is still working toward 09:00, the single "last booked"
+ * then reads 09:05, and 09:00 looks free again. Two trains, one departure, on a live server.
+ *
+ * The last case here runs the same simulation against the old scalar rule and asserts that it DOES double book.
+ * A check that passes on the broken code proves nothing.
+ */
+public class DepartureLedgerCheck {
+
+	private static final int MINUTE = 60000;
+	private static final int MIN_SLACK = 10000;
+
+	public static void main(String[] args) {
+		final List<Integer> everyFiveMinutes = departuresEvery(5 * MINUTE);
+
+		// The reported failure: two sidings whose leads straddle the headway.
+		assertNoDoubleBooking(everyFiveMinutes, new int[]{10 * MINUTE, MINUTE}, "leads straddling the headway");
+		// Leads on either side of, and equal to, the headway.
+		assertNoDoubleBooking(everyFiveMinutes, new int[]{2 * MINUTE, 5 * MINUTE, 13 * MINUTE}, "three leads");
+		// Every siding identical, which is the case that always worked.
+		assertNoDoubleBooking(everyFiveMinutes, new int[]{3 * MINUTE, 3 * MINUTE, 3 * MINUTE}, "identical leads");
+		// An uneven timetable, so consecutive gaps differ and the slack cap moves between departures.
+		assertNoDoubleBooking(departuresAt(0, 4 * MINUTE, 6 * MINUTE, 20 * MINUTE, 21 * MINUTE, 47 * MINUTE),
+				new int[]{9 * MINUTE, MINUTE, 25 * MINUTE}, "uneven timetable");
+
+		assertSettleSpendsThePast(everyFiveMinutes);
+		assertConsumedSetIsPruned(everyFiveMinutes);
+		assertOldScalarRuleDoubleBooks(everyFiveMinutes, new int[]{10 * MINUTE, MINUTE});
+
+		System.out.println("DepartureLedger ok");
+	}
+
+	/** Runs a day of clock through the real gate and fails if any departure is dispatched twice. */
+	private static void assertNoDoubleBooking(List<Integer> departures, int[] leads, String what) {
+		final DepartureLedger ledger = new DepartureLedger();
+		final Map<Long, Integer> dispatchedBy = new HashMap<>();
+		int dispatches = 0;
+
+		for (long now = 0; now < DepartureLedger.MILLISECONDS_PER_DAY; now += 1000) {
+			for (int siding = 0; siding < leads.length; siding++) {
+				final long booked = book(ledger, departures, now, leads[siding]);
+				if (booked < 0) {
+					continue;
+				}
+				final Integer previous = dispatchedBy.put(booked, siding);
+				if (previous != null) {
+					throw new AssertionError(what + ": departure " + clock(booked) + " was dispatched twice, by siding "
+							+ previous + " and siding " + siding);
+				}
+				ledger.consume(booked, now, departures.size());
+				dispatches++;
+			}
+		}
+
+		// A gate that never dispatches also never double books, so the run has to have done some work.
+		if (dispatches < departures.size() / 2) {
+			throw new AssertionError(what + ": only " + dispatches + " of " + departures.size()
+					+ " departures ran, so this case was not exercising the gate");
+		}
+	}
+
+	/** After settling, everything already in the past is spent and the next future departure is not. */
+	private static void assertSettleSpendsThePast(List<Integer> departures) {
+		final DepartureLedger ledger = new DepartureLedger();
+		final long now = 9 * 3600000L + 2 * MINUTE;
+		final long last = DepartureLedger.findLastDepartureAtOrBefore(departures, now);
+		ledger.settle(last);
+
+		if (!ledger.isSpent(last)) {
+			throw new AssertionError("the departure settled on is not spent");
+		}
+		if (!ledger.isSpent(last - 5 * MINUTE)) {
+			throw new AssertionError("a departure before the settle point is not spent");
+		}
+		final long next = DepartureLedger.findDeparture(departures, now, true);
+		if (ledger.isSpent(next)) {
+			throw new AssertionError("the next departure was spent by settling, so the depot would skip it");
+		}
+	}
+
+	/** Pruning must drop only what is older than a day; a departure still inside a lead has to stay spent. */
+	private static void assertConsumedSetIsPruned(List<Integer> departures) {
+		final DepartureLedger ledger = new DepartureLedger();
+		final long now = 12 * 3600000L;
+		final Set<Long> recent = new HashSet<>();
+
+		// Two days of departures, oldest first, consumed through the same path the depot uses.
+		for (long day = -1; day <= 0; day++) {
+			for (final int departure : departures) {
+				final long booked = day * DepartureLedger.MILLISECONDS_PER_DAY + departure;
+				ledger.consume(booked, now, departures.size());
+				if (booked >= now - DepartureLedger.MILLISECONDS_PER_DAY) {
+					recent.add(booked);
+				}
+			}
+		}
+
+		for (final long booked : recent) {
+			if (!ledger.isSpent(booked)) {
+				throw new AssertionError("pruning forgot " + clock(booked) + ", which is less than a day old");
+			}
+		}
+	}
+
+	/**
+	 * The same simulation against the rule that shipped, to prove the case above is not passing vacuously.
+	 */
+	private static void assertOldScalarRuleDoubleBooks(List<Integer> departures, int[] leads) {
+		final Set<Long> dispatched = new HashSet<>();
+		long lastBooked = -1;
+		boolean doubleBooked = false;
+
+		for (long now = 0; now < DepartureLedger.MILLISECONDS_PER_DAY && !doubleBooked; now += 1000) {
+			for (int siding = 0; siding < leads.length; siding++) {
+				final int lead = leads[siding];
+				final long booked = DepartureLedger.findDeparture(departures, now + lead, false);
+				if (booked < 0 || booked == lastBooked || !isReleasable(departures, now, lead, booked)) {
+					continue;
+				}
+				lastBooked = booked;
+				if (!dispatched.add(booked)) {
+					doubleBooked = true;
+					break;
+				}
+			}
+		}
+
+		if (!doubleBooked) {
+			throw new AssertionError("the old scalar rule did not double book, so this check is not reproducing the bug");
+		}
+	}
+
+	/** The gate as the depot runs it, minus the parts that need a world. */
+	private static long book(DepartureLedger ledger, List<Integer> departures, long now, int lead) {
+		final long booked = DepartureLedger.findDeparture(departures, now + lead, false);
+		if (booked < 0 || ledger.isSpent(booked) || !isReleasable(departures, now, lead, booked)) {
+			return -1;
+		}
+		return booked;
+	}
+
+	private static boolean isReleasable(List<Integer> departures, long now, int lead, long booked) {
+		final long release = booked - lead;
+		if (now < release) {
+			return false;
+		}
+		final long next = DepartureLedger.findDeparture(departures, booked + 1, true);
+		final long untilNext = next < 0 ? Long.MAX_VALUE : next - booked;
+		final long slack = Math.max(MIN_SLACK, Math.min(lead, untilNext / 2));
+		return now - release <= slack;
+	}
+
+	private static List<Integer> departuresEvery(int interval) {
+		final List<Integer> departures = new ArrayList<>();
+		for (int millis = 0; millis < DepartureLedger.MILLISECONDS_PER_DAY; millis += interval) {
+			departures.add(millis);
+		}
+		return departures;
+	}
+
+	private static List<Integer> departuresAt(int... millis) {
+		final List<Integer> departures = new ArrayList<>();
+		for (final int departure : millis) {
+			departures.add(departure);
+		}
+		return departures;
+	}
+
+	private static String clock(long millis) {
+		final long ofDay = Math.floorMod(millis, (long) DepartureLedger.MILLISECONDS_PER_DAY) / 1000;
+		return String.format("%02d:%02d:%02d", ofDay / 3600, ofDay / 60 % 60, ofDay % 60);
+	}
+}

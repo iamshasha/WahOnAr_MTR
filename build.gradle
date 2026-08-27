@@ -1,0 +1,339 @@
+import groovy.json.JsonSlurper
+import groovy.xml.XmlSlurper
+import org.apache.tools.ant.filters.ReplaceTokens
+
+plugins {
+	id "architectury-plugin" version "3.4-SNAPSHOT"
+	id "de.undercouch.download" version "4.1.2"
+	id "dev.architectury.loom" version "1.0-SNAPSHOT" apply false
+	id "com.github.johnrengelman.shadow" version "7.1.0" apply false
+}
+
+def default_minecraft_version = "1.16.5"
+def minecraft_version = rootProject.properties.containsKey("buildVersion") ? rootProject.getProperties().get("buildVersion").toString() : default_minecraft_version
+def minecraft_main_version = minecraft_version.split("\\.")[1] as int
+def patreon_api_key = rootProject.properties.containsKey("patreonApiKey") ? rootProject.getProperties().get("patreonApiKey").toString() : ""
+def is_1_19_3 = minecraft_version == "1.19.3" || minecraft_version == "1.19.4"
+// Every dependency version below used to be whatever the upstream server happened to be serving at the moment
+// of the build, so the same source could produce a different jar on different days -- and did: loader 0.19.4
+// widened @Redirect's `at` to an array and every client crashed on a jar whose source had not changed a line.
+// Pinned now, and overridable one at a time with -P for a deliberate test against something newer.
+def pinned = { String property, String fallback ->
+	rootProject.properties.containsKey(property) ? rootProject.getProperties().get(property).toString() : fallback
+}
+
+def parchment_version = pinned("parchmentVersion", "2023.06.25")
+def testServer = rootProject.properties.containsKey("testServer") ? rootProject.getProperties().get("testServer").toString() : ""
+
+
+// Pinned, not fetched. This used to ask fabric for the newest loader at build time, so the jar was compiled
+// against whatever had been published that morning rather than against what the game runs. Loader 0.19.4
+// declares @Redirect.at as an array, so javac emits `at = [@At(...)]` where every earlier build emitted a
+// single annotation — and the MixinExtras that ships with 0.19.2, which is what clients run, casts that value
+// straight to AnnotationNode. Every client crashed before the main menu, on source that had not changed.
+// Build against the loader we ship on; a newer loader can read the old shape, but not the reverse.
+// Override with -PfabricLoaderVersion=... to test against a different one on purpose.
+rootProject.ext.fabric_loader_version = [minecraft_version, rootProject.properties.containsKey("fabricLoaderVersion") ? rootProject.getProperties().get("fabricLoaderVersion").toString() : "0.19.2"]
+rootProject.ext.forge_version = pinned("forgeVersion", "1.19.4-45.4.5")
+rootProject.ext.fabric_api_data = getModrinthData("fabric", minecraft_version, "fabric-api", pinned("fabricApiVersion", "0.87.2+1.19.4"))
+rootProject.ext.mod_menu_data = getModrinthData("fabric", minecraft_version, "modmenu", pinned("modMenuVersion", "6.3.1"))
+rootProject.ext.architectury_data = getModrinthData("forge", minecraft_version, "architectury-api", pinned("architecturyVersion", "8.2.91+forge"))
+
+rootProject.ext.architectury_id = minecraft_main_version == 16 ? "me.shedaniel" : "dev.architectury"
+rootProject.ext.variation = rootProject.properties.containsKey("variation") ? rootProject.getProperties().get("variation").toString() : "normal"
+rootProject.ext.variation_header = rootProject.variation == "normal" ? "MTR" : rootProject.variation == "server" ? "MTR-server" : "Modern-Elevators-Escalators"
+
+architectury {
+	minecraft = minecraft_version
+}
+
+subprojects {
+	apply plugin: "dev.architectury.loom"
+	apply plugin: "com.github.johnrengelman.shadow"
+
+	loom {
+		silentMojangMappingsLicense()
+
+		mixin {
+			defaultRefmapName.set("mtr-refmap.json")
+		}
+	}
+
+	configurations {
+		shadowCommon
+	}
+
+	dependencies {
+		minecraft "com.mojang:minecraft:${minecraft_version}"
+		mappings loom.layered() {
+			officialMojangMappings()
+			parchment("org.parchmentmc.data:parchment-${is_1_19_3 ? "1.19.3" : minecraft_version}:${parchment_version}@zip")
+		}
+		implementation name: "Dynmap-3.2.1"
+		implementation name: "BlueMapAPI-2.1.1"
+		implementation "xyz.jpenilla:squaremap-api:1.2.3" // pinned: the open range now pulls adventure-api 5.x, whose class files this Loom/TinyRemapper cannot read
+		implementation "org.eclipse.jetty:jetty-http:9.+"
+		implementation "org.eclipse.jetty:jetty-io:9.+"
+		implementation "org.eclipse.jetty:jetty-security:9.+"
+		implementation "org.eclipse.jetty:jetty-server:9.+"
+		implementation "org.eclipse.jetty:jetty-servlet:9.+"
+		implementation "org.eclipse.jetty:jetty-util:9.+"
+		implementation "org.eclipse.jetty:jetty-util-ajax:9.+"
+		implementation "javax.servlet:javax.servlet-api:+"
+		implementation "org.msgpack:msgpack-core:+"
+		implementation "com.hierynomus:sshj:+"
+		implementation "com.github.jonafanho:Minecraft-Mod-API-Tools:${rootProject.minecraft_mod_api_tools_version}"
+		shadowCommon "org.eclipse.jetty:jetty-http:9.+"
+		shadowCommon "org.eclipse.jetty:jetty-io:9.+"
+		shadowCommon "org.eclipse.jetty:jetty-security:9.+"
+		shadowCommon "org.eclipse.jetty:jetty-server:9.+"
+		shadowCommon "org.eclipse.jetty:jetty-servlet:9.+"
+		shadowCommon "org.eclipse.jetty:jetty-util:9.+"
+		shadowCommon "org.eclipse.jetty:jetty-util-ajax:9.+"
+		shadowCommon "javax.servlet:javax.servlet-api:+"
+		shadowCommon "org.msgpack:msgpack-core:+"
+	}
+}
+
+task setupFiles() {
+	System.out.println("Fabric Loader: " + rootProject.fabric_loader_version[1])
+	System.out.println("Forge: " + rootProject.forge_version)
+	System.out.println("Fabric API: " + rootProject.fabric_api_data[0])
+	System.out.println("Mod Menu: " + rootProject.mod_menu_data[0])
+	System.out.println("Architectury: " + rootProject.architectury_data[0].split("\\+")[0])
+	System.out.println("Parchment: " + parchment_version)
+
+	download {
+		src "https://github.com/jonafanho/Minecraft-Mappings/archive/refs/heads/${is_1_19_3 ? minecraft_version : "1." + minecraft_main_version}.zip"
+		dest "common/src/main/java/mtr/mappings/mappings.zip"
+		overwrite true
+		retries - 1
+	}
+	copy {
+		outputs.upToDateWhen { false }
+		from(zipTree("common/src/main/java/mtr/mappings/mappings.zip")) { eachFile { file -> file.relativePath = new RelativePath(true, file.relativePath.segments.drop(1) as String[]) } }
+		into "common/src/main/java/mtr/mappings"
+		filter(ReplaceTokens, tokens: ["package": "mtr.mappings"])
+	}
+	ant.path { ant.fileset(dir: "common/src/main/java/mtr/mappings", includes: "Fabric*.java") }.list().each {
+		ant.move(file: it, todir: "fabric/src/main/java/mtr/mappings")
+	}
+	ant.path { ant.fileset(dir: "common/src/main/java/mtr/mappings", includes: "Forge*.java") }.list().each {
+		ant.move(file: it, todir: "forge/src/main/java/mtr/mappings")
+	}
+
+	delete fileTree("common/src/main/resources/assets/mtr/sounds")
+	delete fileTree("common/src/main/resources/assets/mtr/textures")
+	delete fileTree("common/src/main/resources/assets/mtr/website")
+	delete fileTree("common/src/main/resources/assets/mtr/sounds.json")
+	delete fileTree("common/src/main/resources/data/mtr/loot_tables")
+	delete fileTree("common/src/main/resources/data/mtr/recipes")
+	delete fileTree("fabric/src/main/resources")
+	delete fileTree("forge/src/main/resources")
+	copy {
+		outputs.upToDateWhen { false }
+		from "resources/common/lifts"
+		into "common/src/main/resources"
+	}
+	if (rootProject.variation == "normal") {
+		copy {
+			outputs.upToDateWhen { false }
+			from "resources/common/normal"
+			into "common/src/main/resources"
+		}
+	}
+	if (rootProject.variation == "normal" || rootProject.variation == "server") {
+		download {
+			src "https://unpkg.com/fabric@5.3.0/dist/fabric.min.js"
+			dest "common/src/main/resources/assets/mtr/website/fabric.min.js"
+			overwrite true
+			retries - 1
+		}
+		download {
+			src "https://raw.githubusercontent.com/bramstein/fontfaceobserver/master/fontfaceobserver.standalone.js"
+			dest "common/src/main/resources/assets/mtr/website/fontfaceobserver.standalone.js"
+			overwrite true
+			retries - 1
+		}
+		copy {
+			outputs.upToDateWhen { false }
+			from "resources/common/normal/data"
+			into "common/src/main/resources/data"
+		}
+		copy {
+			outputs.upToDateWhen { false }
+			from "resources/common/normal/assets/mtr/website"
+			into "common/src/main/resources/assets/mtr/website"
+		}
+	}
+	copy {
+		outputs.upToDateWhen { false }
+		from "resources/fabric/" + (rootProject.variation == "lifts" ? "lifts" : "normal")
+		into "fabric/src/main/resources"
+	}
+	copy {
+		outputs.upToDateWhen { false }
+		from "resources/forge/" + (rootProject.variation == "lifts" ? "lifts" : "normal")
+		into "forge/src/main/resources"
+	}
+
+	download {
+		src "https://crowdin.com/backend/download/project/minecraft-transit-railway.zip"
+		dest "common/src/main/java/mtr/mappings/lang.zip"
+		overwrite true
+		retries - 1
+	}
+	// Crowdin serves an HTML error page instead of a zip when the export is unavailable; keep the bundled languages in that case
+	if (new File("common/src/main/java/mtr/mappings/lang.zip").bytes.length > 2 && new File("common/src/main/java/mtr/mappings/lang.zip").bytes[0] == (byte) 0x50 && new File("common/src/main/java/mtr/mappings/lang.zip").bytes[1] == (byte) 0x4B) {
+		copy {
+			outputs.upToDateWhen { false }
+			from(zipTree("common/src/main/java/mtr/mappings/lang.zip"))
+			into "common/src/main/resources/assets/mtr/lang"
+			// Crowdin exports zh_TW.json, but resource lookup inside a jar is case sensitive and Minecraft asks for
+			// zh_tw, so the mixed case files were never loaded and every language but English silently fell back
+			rename { String name -> name.toLowerCase() }
+		}
+	} else {
+		System.out.println("Crowdin languages unavailable, using bundled languages only")
+	}
+
+	copy {
+		outputs.upToDateWhen { false }
+		from "common/src/main/KeysTemplate.java"
+		into "common/src/main/java/mtr"
+		filter(ReplaceTokens, tokens: ["key": patreon_api_key, "version": minecraft_version + "-" + rootProject.mod_version, "lifts": rootProject.variation, "server": testServer])
+		rename "(.+)Template.java", "\$1.java"
+	}
+	copy {
+		outputs.upToDateWhen { false }
+		from "common/src/main/latest.json"
+		into "build/latest"
+		filter(ReplaceTokens, tokens: ["version": rootProject.mod_version])
+	}
+	copy {
+		outputs.upToDateWhen { false }
+		from "common/src/main/version-template.js"
+		into "common/src/main/resources/assets/mtr/website"
+		filter(ReplaceTokens, tokens: ["version": minecraft_version + "-" + rootProject.mod_version])
+		rename "(.+)-template.js", "\$1.js"
+	}
+	copy {
+		outputs.upToDateWhen { false }
+		from "fabric/src/main/UnknownPacketMixinTemplate.java"
+		into "fabric/src/main/java/mtr/mixin"
+		filter(ReplaceTokens, tokens: ["path1": minecraft_main_version <= 17 || minecraft_version == "1.18" ? "apache/logging/log4j" : "slf4j", "path2": minecraft_main_version <= 17 || minecraft_version == "1.18" ? "apache.logging.log4j" : "slf4j"])
+		rename "(.+)Template.java", "\$1.java"
+	}
+	copy {
+		outputs.upToDateWhen { false }
+		from "forge/src/main/LevelRendererMixinTemplate.java"
+		into "forge/src/main/java/mtr/mixin"
+		filter(ReplaceTokens, tokens: ["path": is_1_19_3 ? "org.joml" : "com.mojang.math"])
+		rename "(.+)Template.java", "\$1.java"
+	}
+
+	if (minecraft_main_version <= 17) {
+		copy {
+			outputs.upToDateWhen { false }
+			from "fabric/src/main/BlockEntityExtensionTemplate.java"
+			into "fabric/src/main/java/" + (minecraft_main_version == 16 ? "me/shedaniel" : "dev") + "/architectury/extensions"
+			filter(ReplaceTokens, tokens: ["package": minecraft_main_version == 16 ? "me.shedaniel" : "dev"])
+			rename "(.+)Template.java", "\$1.java"
+		}
+	}
+	if (minecraft_main_version != 16) {
+		ant.delete(dir: "fabric/src/main/java/me")
+	}
+	if (minecraft_main_version != 17) {
+		ant.delete(dir: "fabric/src/main/java/dev")
+	}
+}
+
+allprojects {
+	apply plugin: "architectury-plugin"
+
+	version = minecraft_version + "-" + rootProject.mod_version
+	group = rootProject.maven_group
+
+	repositories {
+		maven { url = "https://jitpack.io/" }
+		maven { url = "https://maven.terraformersmc.com/" }
+		maven { url = "https://maven.parchmentmc.org/" }
+		flatDir {
+			dirs "../libs"
+		}
+	}
+
+	tasks.withType(JavaCompile) {
+		options.encoding = "UTF-8"
+
+		if (minecraft_main_version == 16) {
+			def targetVersion = 8
+			if (JavaVersion.current().isJava9Compatible()) {
+				options.release = targetVersion
+			}
+		} else if (minecraft_main_version == 17) {
+			options.release = 16
+		} else {
+			options.release = 17
+		}
+	}
+
+	afterEvaluate {
+		for (def task in it.tasks) {
+			if (task != rootProject.tasks.setupFiles) {
+				task.dependsOn rootProject.tasks.setupFiles
+			}
+		}
+	}
+}
+
+/**
+ * The download for one pinned dependency version.
+ *
+ * The version is asked for by name rather than taken as "the newest that matches", so a release upstream cannot
+ * change what this build produces. A pin that no longer exists stops the build: falling back to the newest is
+ * exactly the silent drift this is here to prevent.
+ */
+static String[] getModrinthData(String loader, String minecraftVersion, String projectId, String pinnedVersion) {
+	def versionsArray = getJson("https://api.modrinth.com/v2/project/" + projectId + "/version")
+	for (def versionElement : versionsArray) {
+		if (versionElement["loaders"].contains(loader) && versionElement["game_versions"].contains(minecraftVersion)) {
+			if (versionElement["version_number"] == pinnedVersion) {
+				return [versionElement["version_number"], versionElement["files"][0]["url"]]
+			}
+		}
+	}
+	throw new GradleException("Pinned " + projectId + " version " + pinnedVersion + " is not published for "
+			+ loader + " " + minecraftVersion + " any more. Pick a replacement in build.gradle deliberately, "
+			+ "and check what the clients actually run before you do.")
+}
+
+static Object getJson(String url) {
+	int tries = 0
+	while (true) {
+		try {
+			if (tries > 1) {
+				System.out.println("Parsed ${url} after ${tries} tries")
+			}
+			return new JsonSlurper().parse(url.toURL())
+		} catch (Exception ignored) {
+			Thread.sleep(1000)
+		}
+	}
+}
+
+static Object getXml(String url) {
+	int tries = 0
+	while (true) {
+		try {
+			if (tries > 1) {
+				System.out.println("Parsed ${url} after ${tries} tries")
+			}
+			return new XmlSlurper().parse(url)
+		} catch (Exception ignored) {
+			Thread.sleep(1000)
+			tries++
+		}
+	}
+}
