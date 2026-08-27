@@ -34,9 +34,10 @@ def testServer = rootProject.properties.containsKey("testServer") ? rootProject.
 // Build against the loader we ship on; a newer loader can read the old shape, but not the reverse.
 // Override with -PfabricLoaderVersion=... to test against a different one on purpose.
 rootProject.ext.fabric_loader_version = [minecraft_version, rootProject.properties.containsKey("fabricLoaderVersion") ? rootProject.getProperties().get("fabricLoaderVersion").toString() : "0.19.2"]
-rootProject.ext.forge_version = pinned("forgeVersion", "1.19.4-45.4.5")
 rootProject.ext.fabric_api_data = getModrinthData("fabric", minecraft_version, "fabric-api", pinned("fabricApiVersion", "0.87.2+1.19.4"))
 rootProject.ext.mod_menu_data = getModrinthData("fabric", minecraft_version, "modmenu", pinned("modMenuVersion", "6.3.1"))
+// Forge is gone, but common/build.gradle still needs the Architectury version and this is where the listing
+// publishes it. The artifact common resolves is the loader-neutral one.
 rootProject.ext.architectury_data = getModrinthData("forge", minecraft_version, "architectury-api", pinned("architecturyVersion", "8.2.91+forge"))
 
 rootProject.ext.architectury_id = minecraft_main_version == 16 ? "me.shedaniel" : "dev.architectury"
@@ -97,7 +98,6 @@ subprojects {
 
 task setupFiles() {
 	System.out.println("Fabric Loader: " + rootProject.fabric_loader_version[1])
-	System.out.println("Forge: " + rootProject.forge_version)
 	System.out.println("Fabric API: " + rootProject.fabric_api_data[0])
 	System.out.println("Mod Menu: " + rootProject.mod_menu_data[0])
 	System.out.println("Architectury: " + rootProject.architectury_data[0].split("\\+")[0])
@@ -118,9 +118,10 @@ task setupFiles() {
 	ant.path { ant.fileset(dir: "common/src/main/java/mtr/mappings", includes: "Fabric*.java") }.list().each {
 		ant.move(file: it, todir: "fabric/src/main/java/mtr/mappings")
 	}
-	ant.path { ant.fileset(dir: "common/src/main/java/mtr/mappings", includes: "Forge*.java") }.list().each {
-		ant.move(file: it, todir: "forge/src/main/java/mtr/mappings")
-	}
+	// The mappings archive still ships the Forge half. It used to be moved into the forge project; with that
+	// project gone it has to be deleted, or it stays behind in common and fails to compile against Forge classes
+	// that are no longer on the classpath.
+	delete fileTree(dir: "common/src/main/java/mtr/mappings", includes: ["Forge*.java"])
 
 	delete fileTree("common/src/main/resources/assets/mtr/sounds")
 	delete fileTree("common/src/main/resources/assets/mtr/textures")
@@ -129,7 +130,6 @@ task setupFiles() {
 	delete fileTree("common/src/main/resources/data/mtr/loot_tables")
 	delete fileTree("common/src/main/resources/data/mtr/recipes")
 	delete fileTree("fabric/src/main/resources")
-	delete fileTree("forge/src/main/resources")
 	copy {
 		outputs.upToDateWhen { false }
 		from "resources/common/lifts"
@@ -170,11 +170,6 @@ task setupFiles() {
 		outputs.upToDateWhen { false }
 		from "resources/fabric/" + (rootProject.variation == "lifts" ? "lifts" : "normal")
 		into "fabric/src/main/resources"
-	}
-	copy {
-		outputs.upToDateWhen { false }
-		from "resources/forge/" + (rootProject.variation == "lifts" ? "lifts" : "normal")
-		into "forge/src/main/resources"
 	}
 
 	download {
@@ -222,13 +217,6 @@ task setupFiles() {
 		from "fabric/src/main/UnknownPacketMixinTemplate.java"
 		into "fabric/src/main/java/mtr/mixin"
 		filter(ReplaceTokens, tokens: ["path1": minecraft_main_version <= 17 || minecraft_version == "1.18" ? "apache/logging/log4j" : "slf4j", "path2": minecraft_main_version <= 17 || minecraft_version == "1.18" ? "apache.logging.log4j" : "slf4j"])
-		rename "(.+)Template.java", "\$1.java"
-	}
-	copy {
-		outputs.upToDateWhen { false }
-		from "forge/src/main/LevelRendererMixinTemplate.java"
-		into "forge/src/main/java/mtr/mixin"
-		filter(ReplaceTokens, tokens: ["path": is_1_19_3 ? "org.joml" : "com.mojang.math"])
 		rename "(.+)Template.java", "\$1.java"
 	}
 
