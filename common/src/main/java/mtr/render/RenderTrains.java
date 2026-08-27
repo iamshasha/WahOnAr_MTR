@@ -68,6 +68,17 @@ public class RenderTrains extends EntityRendererMapper<EntitySeat> implements IG
 	private static final int MAX_RADIUS_REPLAY_MOD = 64 * 16;
 	// Generous enough to cover a full train car plus its gangway, so nothing pops in at the edge of the screen
 	private static final int CULLING_MARGIN = 24;
+	/**
+	 * How far vehicles are still drawn when the client is struggling.
+	 *
+	 * {@link #DETAIL_RADIUS} is the distance at which a vehicle stops being drawn in detail, which is a different
+	 * question from the distance at which it stops being drawn at all. Using it for both meant a busy client lost
+	 * sight of anything past the end of one platform.
+	 */
+	private static final int MIN_TRAIN_RENDER_DISTANCE = 64;
+	/** Consecutive slow frames before giving up any distance, so a single hitch does not cost anything. */
+	private static final int SLOW_FRAMES_BEFORE_REDUCING = 10;
+	private static int slowFrames;
 	private static final int BLOCK_CULLING_MARGIN = 2;
 	/** Reused rather than allocated per frame: in a rail-dense area this holds an entry for every rail in range. */
 	private static final Map<UUID, RailType> RENDERED_RAIL_MAP = new HashMap<>();
@@ -145,14 +156,31 @@ public class RenderTrains extends EntityRendererMapper<EntitySeat> implements IG
 		final float newLastFrameDuration = client.isPaused() || lastRenderedTick == MTRClient.getGameTick() ? 0 : lastFrameDuration;
 		final boolean useAnnouncements = Config.useTTSAnnouncements() || Config.showAnnouncementMessages();
 
+		final int fullTrainRenderDistance = renderDistanceChunks * (Config.trainRenderDistanceRatio() + 1);
 		if (Config.useDynamicFPS()) {
+			// One slow frame is nearly always a chunk being built or a burst of packets arriving, not the trains
+			// costing too much to draw — and those are exactly what happens while riding fast or crossing a busy
+			// area. Giving up half the distance on the first of them, every frame, and then winning it back one
+			// block at a time is why vehicles vanish when the world gets busy and stay gone: the collapse was
+			// geometric and the recovery linear, so a fifth of a second of hitching cost hundreds of good frames.
+			// Now it takes a sustained run of slow frames to give ground, it gives a quarter rather than a half,
+			// and it comes back at the same rate it left.
 			if (lastFrameDuration > 0.5) {
-				maxTrainRenderDistance = Math.max(maxTrainRenderDistance - (maxTrainRenderDistance - DETAIL_RADIUS) / 2, DETAIL_RADIUS);
-			} else if (lastFrameDuration < 0.4) {
-				maxTrainRenderDistance = Math.min(maxTrainRenderDistance + 1, renderDistanceChunks * (Config.trainRenderDistanceRatio() + 1));
+				slowFrames++;
+				if (slowFrames >= SLOW_FRAMES_BEFORE_REDUCING) {
+					slowFrames = 0;
+					maxTrainRenderDistance = Math.max(maxTrainRenderDistance - Math.max(1, (maxTrainRenderDistance - MIN_TRAIN_RENDER_DISTANCE) / 4), MIN_TRAIN_RENDER_DISTANCE);
+				}
+			} else {
+				slowFrames = 0;
+				if (lastFrameDuration < 0.4) {
+					maxTrainRenderDistance = Math.min(maxTrainRenderDistance + Math.max(1, (fullTrainRenderDistance - maxTrainRenderDistance) / 8), fullTrainRenderDistance);
+				}
 			}
+			// A cap that dropped while the view distance was low must not stay there once it is raised again
+			maxTrainRenderDistance = Math.min(maxTrainRenderDistance, fullTrainRenderDistance);
 		} else {
-			maxTrainRenderDistance = renderDistanceChunks * (Config.trainRenderDistanceRatio() + 1);
+			maxTrainRenderDistance = fullTrainRenderDistance;
 		}
 
 		if (!backupRendering) {
