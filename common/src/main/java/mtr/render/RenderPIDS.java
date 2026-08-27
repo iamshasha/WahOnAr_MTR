@@ -5,6 +5,7 @@ import mtr.MTRClient;
 import mtr.block.BlockArrivalProjectorBase;
 import mtr.block.IBlock;
 import mtr.client.ClientData;
+import mtr.client.Config;
 import mtr.data.*;
 import mtr.mappings.BlockEntityMapper;
 import mtr.mappings.BlockEntityRendererMapper;
@@ -26,6 +27,13 @@ import java.util.*;
 import static mtr.block.IBlock.HALF;
 
 public class RenderPIDS<T extends BlockEntityMapper> extends BlockEntityRendererMapper<T> implements IGui {
+
+	/** The wall clock time a train is due, as the server's own clock reads it. */
+	private static String formatClockTime(long arrivalMillis) {
+		final long ofDay = Math.floorMod(arrivalMillis, 86400000L) / 1000;
+		return String.format("%d:%02d", ofDay / 3600, ofDay / 60 % 60);
+	}
+
 
 	private final float scale;
 	private final float totalScaledWidth;
@@ -269,7 +277,16 @@ public class RenderPIDS<T extends BlockEntityMapper> extends BlockEntityRenderer
 						final Component arrivalText;
 						// Get arrival time
 						final int seconds = (int) ((currentSchedule.arrivalMillis - System.currentTimeMillis()) / 1000);
-						if (seconds >= 60) {
+						if (Config.showArrivalClockTime()) {
+							// The time a train is due, rather than how long until it gets here. A countdown has to
+							// keep revising itself as a train runs late, and a revised countdown reads as a fault
+							// even when it is telling the truth; a due time simply moves to a later due time.
+							if ((arrivalLine == 1 && renderVertical) || (arrivalLine == 0 && renderSingle) || renderClassic) {
+								arrivalText = seconds > 0 ? Text.literal(formatClockTime(currentSchedule.arrivalMillis)) : null;
+							} else {
+								arrivalText = Text.literal("");
+							}
+						} else if (seconds >= 60) {
 							if ((arrivalLine == 1 && renderVertical) || (arrivalLine == 0 && renderSingle) || renderClassic) {
 								arrivalText = Text.translatable(isCJK ? "gui.mtr.arrival_min_cjk" : "gui.mtr.arrival_min", seconds / 60).append(appendDotAfterMin && !isCJK ? "." : "");
 							} else {

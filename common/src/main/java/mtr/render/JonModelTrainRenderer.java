@@ -105,7 +105,11 @@ public class JonModelTrainRenderer extends TrainRendererBase implements IGui {
 
 		// Lean into the curve. MTR-ANTE rolls the cars itself at this same point, so stand down when it is loaded
 		// rather than leaning twice; the pivot sits a block above the floor so the car rolls about its body, not its feet.
-		final float sway = Config.useVehicleSway() && !MTRClient.isAnte() ? train.getSwayRoll(carIndex) : 0;
+		// ANTE banks the cars into curves itself, so the lean is left to it or the train rolls twice. It does not
+		// rock a train running on straight track, though, and that half is worth having either way.
+		final float sway = !Config.useVehicleSway() ? 0
+				: MTRClient.isAnte() ? train.getSwayRunningRoll(carIndex)
+				: train.getSwayRoll(carIndex);
 		if (sway != 0) {
 			final float swayPivot = TrainClient.getSwayPivotHeight();
 			matrices.translate(0, swayPivot, 0);

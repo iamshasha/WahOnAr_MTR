@@ -527,8 +527,9 @@ public class Siding extends SavedRailBase implements IPacket, IReducedSaveData {
 	 * How far ahead of a booked departure this siding has to let go of its train, so that the train is standing at
 	 * the origin platform before that departure rather than only setting off then.
 	 *
-	 * Over-estimating is free: the origin hold departs on the booked time whatever happens, so a train that arrives
-	 * early simply waits. Under-estimating would make it late, so the rounding here leans early on purpose.
+	 * Over-estimating is not free. A train released too early sits on the origin platform holding it against the
+	 * service behind, and the platform is what the next arrival is waiting for. Leaning early costs headway, so
+	 * this aims to put the train at the platform exactly one stop before its booked departure.
 	 */
 	public int getDispatchLeadMillis() {
 		final Map<Long, Float> fromThisSiding = platformTimes.get(id);
@@ -538,7 +539,11 @@ public class Siding extends SavedRailBase implements IPacket, IReducedSaveData {
 				travelTicks = Math.max(travelTicks, ticks);
 			}
 		}
-		return (int) ((travelTicks + getFirstPlatformDwellTicks()) * Depot.MILLIS_PER_TICK);
+		// platformTimes measures from the middle of one stop to the middle of the next: generateTimeSegments adds
+		// half the dwell, records the time, then adds the other half. So travelTicks already carries half of the
+		// origin platform's stop, and adding the whole stop on top counted it one and a half times. A minute-long
+		// stop therefore released the train thirty seconds early, which is exactly what it did.
+		return (int) ((travelTicks + getFirstPlatformDwellTicks() / 2f) * Depot.MILLIS_PER_TICK);
 	}
 
 	private int getFirstPlatformDwellTicks() {

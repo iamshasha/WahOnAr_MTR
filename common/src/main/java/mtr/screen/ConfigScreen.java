@@ -31,6 +31,7 @@ public class ConfigScreen extends ScreenMapper implements IGui {
 	private boolean useDynamicFPS;
 	private boolean useVehicleSway;
 	private boolean useFrustumCulling;
+	private boolean showArrivalClockTime;
 
 	/** Nothing to offer when the minimap that would receive the waypoints is not installed, so the row is hidden. */
 	private final boolean hasMinimap = XaeroWaypoints.isAvailable();
@@ -49,6 +50,7 @@ public class ConfigScreen extends ScreenMapper implements IGui {
 	private final Button buttonUseDynamicFPS;
 	private final Button buttonUseVehicleSway;
 	private final Button buttonUseFrustumCulling;
+	private final Button buttonShowArrivalClockTime;
 	private final WidgetShorterSlider sliderTrackTextureOffset;
 	private final WidgetShorterSlider sliderDynamicTextureResolution;
 	private final WidgetShorterSlider sliderTrainRenderDistanceRatio;
@@ -118,6 +120,10 @@ public class ConfigScreen extends ScreenMapper implements IGui {
 			useVehicleSway = Config.setUseVehicleSway(!useVehicleSway);
 			setButtonText(button, useVehicleSway);
 		});
+		buttonShowArrivalClockTime = UtilitiesClient.newButton(BUTTON_HEIGHT, Text.literal(""), button -> {
+			showArrivalClockTime = Config.setShowArrivalClockTime(!showArrivalClockTime);
+			setButtonText(button, showArrivalClockTime);
+		});
 		buttonUseFrustumCulling = UtilitiesClient.newButton(BUTTON_HEIGHT, Text.literal(""), button -> {
 			useFrustumCulling = Config.setUseFrustumCulling(!useFrustumCulling);
 			setButtonText(button, useFrustumCulling);
@@ -146,6 +152,7 @@ public class ConfigScreen extends ScreenMapper implements IGui {
 		useDynamicFPS = Config.useDynamicFPS();
 		useVehicleSway = Config.useVehicleSway();
 		useFrustumCulling = Config.useFrustumCulling();
+		showArrivalClockTime = Config.showArrivalClockTime();
 
 		final int offsetY;
 		if (hasTimeAndWindControls) {
@@ -168,6 +175,7 @@ public class ConfigScreen extends ScreenMapper implements IGui {
 			IDrawing.setPositionAndWidth(buttonUseDynamicFPS, width - SQUARE_SIZE - BUTTON_WIDTH, BUTTON_HEIGHT * (i++) + SQUARE_SIZE + offsetY, BUTTON_WIDTH);
 			IDrawing.setPositionAndWidth(buttonUseVehicleSway, width - SQUARE_SIZE - BUTTON_WIDTH, BUTTON_HEIGHT * (i++) + SQUARE_SIZE + offsetY, BUTTON_WIDTH);
 			IDrawing.setPositionAndWidth(buttonUseFrustumCulling, width - SQUARE_SIZE - BUTTON_WIDTH, BUTTON_HEIGHT * (i++) + SQUARE_SIZE + offsetY, BUTTON_WIDTH);
+			IDrawing.setPositionAndWidth(buttonShowArrivalClockTime, width - SQUARE_SIZE - BUTTON_WIDTH, BUTTON_HEIGHT * (i++) + SQUARE_SIZE + offsetY, BUTTON_WIDTH);
 			IDrawing.setPositionAndWidth(sliderTrackTextureOffset, width - SQUARE_SIZE - BUTTON_WIDTH, BUTTON_HEIGHT * (i++) + SQUARE_SIZE + offsetY, BUTTON_WIDTH - TEXT_PADDING - font.width("100%"));
 			IDrawing.setPositionAndWidth(sliderDynamicTextureResolution, width - SQUARE_SIZE - BUTTON_WIDTH, BUTTON_HEIGHT * (i++) + SQUARE_SIZE + offsetY, BUTTON_WIDTH - TEXT_PADDING - font.width("100%"));
 			IDrawing.setPositionAndWidth(sliderTrainRenderDistanceRatio, width - SQUARE_SIZE - BUTTON_WIDTH, BUTTON_HEIGHT * (i++) + SQUARE_SIZE + offsetY, BUTTON_WIDTH - TEXT_PADDING - font.width("100%"));
@@ -187,6 +195,7 @@ public class ConfigScreen extends ScreenMapper implements IGui {
 		setButtonText(buttonUseDynamicFPS, useDynamicFPS);
 		setButtonText(buttonUseVehicleSway, useVehicleSway);
 		setButtonText(buttonUseFrustumCulling, useFrustumCulling);
+		setButtonText(buttonShowArrivalClockTime, showArrivalClockTime);
 		sliderTrackTextureOffset.setHeight(BUTTON_HEIGHT);
 		sliderTrackTextureOffset.setValue(Config.trackTextureOffset());
 		sliderDynamicTextureResolution.setHeight(BUTTON_HEIGHT);
@@ -209,6 +218,7 @@ public class ConfigScreen extends ScreenMapper implements IGui {
 			addDrawableChild(buttonUseDynamicFPS);
 			addDrawableChild(buttonUseVehicleSway);
 			addDrawableChild(buttonUseFrustumCulling);
+			addDrawableChild(buttonShowArrivalClockTime);
 			addDrawableChild(sliderTrackTextureOffset);
 			addDrawableChild(sliderDynamicTextureResolution);
 			addDrawableChild(sliderTrainRenderDistanceRatio);
@@ -245,6 +255,7 @@ public class ConfigScreen extends ScreenMapper implements IGui {
 				drawOption(matrices, "options.mtr.use_dynamic_fps", BUTTON_HEIGHT * (i++) + yStart1);
 				drawOption(matrices, "options.mtr.use_vehicle_sway", BUTTON_HEIGHT * (i++) + yStart1);
 				drawOption(matrices, "options.mtr.use_frustum_culling", BUTTON_HEIGHT * (i++) + yStart1);
+				drawOption(matrices, "options.mtr.show_arrival_clock_time", BUTTON_HEIGHT * (i++) + yStart1);
 				drawOption(matrices, "options.mtr.track_texture_offset", BUTTON_HEIGHT * (i++) + yStart1);
 				drawOption(matrices, "options.mtr.dynamic_texture_resolution", BUTTON_HEIGHT * (i++) + yStart1);
 				drawOption(matrices, "options.mtr.vehicle_render_distance_ratio", BUTTON_HEIGHT * (i++) + yStart1);

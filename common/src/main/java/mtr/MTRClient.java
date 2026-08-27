@@ -330,7 +330,7 @@ public class MTRClient implements IPacket {
 			System.out.println(isReplayMod ? "Running in Replay Mod mode" : "Not running in Replay Mod mode");
 			System.out.println(isVivecraft ? "Vivecraft detected" : "Vivecraft not detected");
 			System.out.println(isPehkui ? "Pehkui detected" : "Pehkui not detected");
-			System.out.println(isAnte ? "MTR-ANTE detected, leaving vehicle sway to it" : "MTR-ANTE not detected");
+			System.out.println(isAnte ? "MTR-ANTE detected, leaving the curve lean to it and keeping the running rock" : "MTR-ANTE not detected");
 
 			if (!Keys.LIFTS_ONLY) {
 				final Minecraft minecraft = Minecraft.getInstance();

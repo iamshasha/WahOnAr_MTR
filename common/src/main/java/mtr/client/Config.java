@@ -25,6 +25,7 @@ public class Config {
 	private static boolean useDynamicFPS = true;
 	private static boolean useVehicleSway = true;
 	private static boolean useFrustumCulling = true;
+	private static boolean showArrivalClockTime;
 	private static int trackTextureOffset;
 	private static int dynamicTextureResolution = 2;
 	private static int trainRenderDistanceRatio = 7;
@@ -46,6 +47,7 @@ public class Config {
 	private static final String TRAIN_RENDER_DISTANCE_RATIO = "train_render_distance_ratio";
 	private static final String USE_VEHICLE_SWAY = "use_vehicle_sway";
 	private static final String USE_FRUSTUM_CULLING = "use_frustum_culling";
+	private static final String SHOW_ARRIVAL_CLOCK_TIME = "show_arrival_clock_time";
 
 	public static boolean useMTRFont() {
 		return useMTRFont;
@@ -81,6 +83,11 @@ public class Config {
 
 	public static boolean useFrustumCulling() {
 		return useFrustumCulling;
+	}
+
+	/** Show the time a train is due rather than how long until it gets here. */
+	public static boolean showArrivalClockTime() {
+		return showArrivalClockTime;
 	}
 
 	public static boolean useVehicleSway() {
@@ -145,6 +152,12 @@ public class Config {
 		useDynamicFPS = value;
 		writeToFile();
 		return useDynamicFPS;
+	}
+
+	public static boolean setShowArrivalClockTime(boolean value) {
+		showArrivalClockTime = value;
+		writeToFile();
+		return showArrivalClockTime;
 	}
 
 	public static boolean setUseVehicleSway(boolean value) {
@@ -226,6 +239,10 @@ public class Config {
 				useFrustumCulling = jsonConfig.get(USE_FRUSTUM_CULLING).getAsBoolean();
 			} catch (Exception ignored) {
 			}
+			try {
+				showArrivalClockTime = jsonConfig.get(SHOW_ARRIVAL_CLOCK_TIME).getAsBoolean();
+			} catch (Exception ignored) {
+			}
 		} catch (Exception e) {
 			writeToFile();
 			e.printStackTrace();
@@ -247,6 +264,7 @@ public class Config {
 		jsonConfig.addProperty(TRAIN_RENDER_DISTANCE_RATIO, trainRenderDistanceRatio);
 		jsonConfig.addProperty(USE_VEHICLE_SWAY, useVehicleSway);
 		jsonConfig.addProperty(USE_FRUSTUM_CULLING, useFrustumCulling);
+		jsonConfig.addProperty(SHOW_ARRIVAL_CLOCK_TIME, showArrivalClockTime);
 
 		try {
 			Files.write(CONFIG_FILE_PATH, Collections.singleton(RailwayData.prettyPrint(jsonConfig)));

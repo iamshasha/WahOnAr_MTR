@@ -27,6 +27,9 @@ import java.util.*;
 
 public abstract class Train extends NameColorDataBase implements IPacket {
 
+	/** Blocks ahead to look when reading a direction off the path; long enough to clear a curve's own wobble. */
+	private static final double PATH_DIRECTION_SAMPLE = 2;
+
 	protected float speed;
 	protected double railProgress;
 	/**
@@ -732,9 +735,34 @@ public abstract class Train extends NameColorDataBase implements IPacket {
 	}
 
 	private Vec3 getRoutePosition(int car, int trainSpacing) {
-		final double tempRailProgress = Math.max(getRailProgress(car, trainSpacing) - getModelZOffset(), 0);
+		return positionAlongPath(Math.max(getRailProgress(car, trainSpacing) - getModelZOffset(), 0));
+	}
+
+	private Vec3 positionAlongPath(double tempRailProgress) {
 		final int index = getIndex(tempRailProgress, false);
 		return path.get(index).rail.getPosition(tempRailProgress - (index == 0 ? 0 : distances.get(index - 1))).add(0, transportMode.railOffset, 0);
+	}
+
+	/**
+	 * Which way this vehicle is pointing, read off the path rather than off the gap between its own two ends.
+	 *
+	 * Both ends clamp to the start of the path, so a vehicle standing at the very beginning of its run reports no
+	 * length at all and no direction can be taken from it. That is precisely a vehicle waiting to depart, and it is
+	 * the moment it most needs to tell a vehicle ahead of it from one coming the other way — without this it treats
+	 * every occupied rail as opposing traffic and never moves again.
+	 */
+	protected final Vec3 getPathDirection() {
+		try {
+			final double from = Math.max(railProgress - getModelZOffset(), 0);
+			final double to = from + PATH_DIRECTION_SAMPLE;
+			if (distances.isEmpty() || to >= distances.get(distances.size() - 1)) {
+				return null;
+			}
+			final Vec3 direction = positionAlongPath(to).subtract(positionAlongPath(from));
+			return direction.lengthSqr() < 1e-6 ? null : direction;
+		} catch (Exception e) {
+			return null;
+		}
 	}
 
 	private boolean scanDoors(Level world, double trainX, double trainY, double trainZ, float checkYaw, float pitch, double halfSpacing, int dwellTicks) {

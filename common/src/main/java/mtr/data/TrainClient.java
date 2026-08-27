@@ -199,8 +199,22 @@ public class TrainClient extends Train implements IGui {
 		if (carIndex < 0 || carIndex >= swayLean.length) {
 			return 0;
 		}
+		return swayLean[carIndex] + getSwayRunningRoll(carIndex);
+	}
+
+	/**
+	 * Just the running rock, without the lean into curves.
+	 *
+	 * For riding alongside an addon that banks the cars itself. Applying the curve lean on top of one that is
+	 * already being applied rolls the train twice, but an addon that only leans into curves leaves a train on
+	 * straight track dead still, which is the half worth keeping.
+	 */
+	public float getSwayRunningRoll(int carIndex) {
+		if (carIndex < 0 || carIndex >= swayLean.length) {
+			return 0;
+		}
 		final float runningFraction = Math.min(1, Math.abs(speed) / SWAY_RUNNING_FULL_SPEED);
-		return swayLean[carIndex] + Mth.sin(swayPhase + carIndex * SWAY_CAR_PHASE_OFFSET) * SWAY_RUNNING_AMPLITUDE * runningFraction;
+		return Mth.sin(swayPhase + carIndex * SWAY_CAR_PHASE_OFFSET) * SWAY_RUNNING_AMPLITUDE * runningFraction;
 	}
 
 	public static float getSwayPivotHeight() {

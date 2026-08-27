@@ -30,12 +30,25 @@ public class SignalBlocks {
 	// threading another call through the simulation. Swap to an explicit per-tick clear if this ever gets hot.
 	private static final long TRAIN_REPORT_STALE_MILLIS = 1000;
 
-	public void setTrainPosition(long trainId, Vec3 head, Vec3 tail, boolean onRoute) {
+	public void setTrainPosition(long trainId, Vec3 head, Vec3 tail, Vec3 direction, boolean onRoute) {
 		final TrainReport report = trainReports.computeIfAbsent(trainId, key -> new TrainReport());
 		report.head = head;
 		report.tail = tail;
+		report.direction = direction;
 		report.onRoute = onRoute;
 		report.recordedAt = System.currentTimeMillis();
+	}
+
+	/**
+	 * Which way a train is pointing, as it reported itself, or null if it has not reported recently enough.
+	 *
+	 * Published rather than worked out from the two ends, because a train standing at the start of its path has
+	 * both ends in the same place and no direction can be read from the outside. The train itself can always answer
+	 * from its own path, so it is the one that answers.
+	 */
+	public Vec3 getTrainDirection(long trainId) {
+		final TrainReport report = current(trainId);
+		return report == null ? null : report.direction;
 	}
 
 	/**
@@ -57,10 +70,8 @@ public class SignalBlocks {
 			description.append(", last reported ").append(age / 1000).append("s ago");
 		} else if (report.head == null || report.tail == null) {
 			description.append(", position unknown");
-		} else if (report.head.distanceToSqr(report.tail) < 1) {
-			// Both ends clamp to the start of the path, so a train parked at the very beginning reports a length of
-			// nothing and no direction can be read from it
-			description.append(", both ends at the same point");
+		} else if (report.direction == null) {
+			description.append(", direction unreadable");
 		}
 		if (report.blocked && System.currentTimeMillis() - report.blockedAt <= TRAIN_REPORT_STALE_MILLIS) {
 			description.append(", itself held by ").append(report.blockedBy);
@@ -121,6 +132,7 @@ public class SignalBlocks {
 
 		private Vec3 head;
 		private Vec3 tail;
+		private Vec3 direction;
 		private boolean onRoute;
 		private long recordedAt;
 		private boolean blocked;

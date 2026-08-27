@@ -6,6 +6,55 @@ build, so these numbers will not match anything on the MTR project's site.
 
 Also published, with the Traditional Chinese version, at the server's own site.
 
+## 3.3.13 — 27 August 2026
+
+### Fixes
+
+- **Trains arrived at the origin thirty seconds early.** The mod measures the run between two stops from the
+  middle of one to the middle of the next, so that figure already carries half of the stop at the far end. The
+  dispatch was adding the whole stop on top, counting it one and a half times, and a minute-long stop therefore
+  released the train half a minute too soon.
+
+- **A train that arrived on time could sail straight through its own stop.** A train whose next departure is far
+  off returns to the depot rather than holding the platform, and the test for "far off" was counting the stop it
+  was scheduled to make as time spent idle. A train arriving two minutes before its departure with a one-minute
+  stop is idle for one minute, not two — but it read as idle for two, decided it had a long wait ahead, and ran
+  to the depot instead of stopping. The early arrival above was pushing every train further into this.
+
+- **Trains could be held where they stood, for good.** A train decides whether the one ahead is going its way by
+  comparing directions, and it reads its own direction from the gap between its two ends. A train standing at the
+  very start of its run has both ends in the same place, so no direction could be read from it, so every occupied
+  track ahead looked like oncoming traffic — and nothing that looks like oncoming traffic is ever passed. That is
+  precisely a train waiting to leave a siding. Every vehicle now states which way it faces rather than leaving
+  the others to work it out.
+
+- **Ghost departures on platform displays.** Whether a train shows the next lap's arrivals is the same setting
+  that decides whether it runs another lap. The decision was taken at the far end of the loop, so until it got
+  there a train kept advertising arrivals for a lap it had already been booked not to run. Those then vanished
+  all at once, and every display showing one jumped to a later train. It is decided once now, as the train leaves
+  the origin.
+
+- **Arrival times froze instead of slipping.** Arrival is projected from where a train currently is, and a held
+  train does not move, so the projection stopped changing and the display promised a train in ten seconds for as
+  long as the hold lasted. The time a train has actually lost standing still now counts towards its arrival.
+
+### Additions
+
+- **Platform displays can show when a train is due instead of counting down to it** — 5:49 rather than "4 min".
+  A countdown has to revise itself whenever a train runs late, and a revised countdown reads as a fault even when
+  it is telling the truth; a due time simply becomes a later due time. In the mod's options, off by default.
+
+- **The ground ahead of a moving train is warmed by time, not by distance.** Ninety-six blocks is a comfortable
+  margin at walking pace and about a second and a half at two hundred and forty kilometres an hour, which is
+  where it was actually needed. It now looks a set number of seconds ahead at the train's current speed. Server
+  owners can change or disable it in `config/mtr-server.json`, which the server writes out for itself.
+
+- **Vehicle sway works alongside MTR-ANTE again.** It used to stand down entirely when ANTE was present, because
+  both leaning into curves rolls a train twice. ANTE does not rock a train running on straight track, though, so
+  that half is now kept and only the curve lean is left to ANTE.
+
+`Minecraft_Transit_Railway_1.19.4_3.3.13.jar` · 62,794,236 B · `sha256 1280c0971ae6f0d62294e59e2cc72fe3203458402955e0c97428dff319687f73`
+
 ## 3.3.12 — 27 August 2026
 
 ### Fixes

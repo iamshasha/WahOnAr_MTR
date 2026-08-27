@@ -36,6 +36,8 @@ public class TrainServer extends Train {
 	/** Cached because the path never changes for a given train, and the catch-up check reads it every tick. */
 	private int originIndex = -2;
 	private boolean wasHoldingAtOrigin;
+	/** Whether this lap's stabling question has already been answered, so it is answered once and stays answered. */
+	private boolean stablingDecided;
 	private SignalBlocks signalBlocks;
 	private List<Map<UUID, Long>> trainPositions;
 	private Map<Player, Set<TrainServer>> trainsInPlayerRange = new HashMap<>();
@@ -53,13 +55,24 @@ public class TrainServer extends Train {
 	 * enough to cover the braking curve at line speed, and the ceiling on how close trains will ever bunch up.
 	 */
 	private static final double SAFE_FOLLOWING_DISTANCE = 48;
-	/** How far apart the points ahead of a carrying vehicle are, and how many of them, when warming chunks. */
-	private static final int PRELOAD_STEP_BLOCKS = 32;
-	private static final int PRELOAD_STEPS = 3;
+	/** How far apart the points ahead of a carrying vehicle are when warming chunks — two per chunk crossed. */
+	private static final int PRELOAD_STEP_BLOCKS = 8;
+
 	/** Expires on its own after ten seconds, so nothing here ever has to be released. */
 	private static final TicketType<Unit> PRELOAD_TICKET = TicketType.create("mtr_vehicle_ahead", (a, b) -> 0, 200);
 	/** The chunk this vehicle last warmed from, so it asks once per chunk crossed rather than once per tick. */
 	private long lastPreloadedChunk = Long.MIN_VALUE;
+	/** Set by {@link #isRailBlocked} while this tick's checks run, read once they are done. */
+	private boolean blockedThisTick;
+	/**
+	 * How long this vehicle has been standing still because something is in its way.
+	 *
+	 * Arrival times are projected along the timetable from where the vehicle currently is, and that model has no
+	 * idea a vehicle can stop. A held vehicle does not advance, so the projection stops changing and the platform
+	 * display sits there promising a train in ten seconds for as long as the hold lasts. Counting the time lost
+	 * makes the estimate move in the only direction it honestly can.
+	 */
+	private int heldTicks;
 	/** Path rails scanned ahead when looking for a train to follow. */
 	private static final int FOLLOWING_LOOKAHEAD = 48;
 
@@ -251,6 +264,7 @@ public class TrainServer extends Train {
 					if (yieldsToMe(occupyingTrainId)) {
 						continue;
 					}
+					blockedThisTick = true;
 					if (signalBlocks != null) {
 						signalBlocks.setTrainBlockedBy(id, occupyingTrainId);
 					}
@@ -348,13 +362,22 @@ public class TrainServer extends Train {
 		if (signalBlocks == null || myDirection == null) {
 			return false;
 		}
-		final Vec3 theirs = travelDirection(signalBlocks.getTrainHead(otherTrainId), signalBlocks.getTrainTail(otherTrainId));
+		// Each train publishes its own direction, because a train standing at the start of its path has both ends
+		// in the same place and nothing outside it can work out which way it faces.
+		final Vec3 theirs = signalBlocks.getTrainDirection(otherTrainId);
 		return theirs != null && myDirection.dot(theirs) > 0;
 	}
 
-	/** This train's own direction of travel. Reading both ends walks the path, so callers work it out once. */
+	/**
+	 * This train's own direction of travel. Reading both ends walks the path, so callers work it out once.
+	 *
+	 * Falls back to the path when the two ends give nothing, which is the case for a train standing at the very
+	 * start of its run. Without the fallback such a train reads every occupied rail ahead as opposing traffic and
+	 * is held where it stands for good — which is exactly what was happening to trains trying to leave a siding.
+	 */
 	private Vec3 myTravelDirection() {
-		return travelDirection(getHeadPosition(), getTailPosition());
+		final Vec3 fromEnds = travelDirection(getHeadPosition(), getTailPosition());
+		return fromEnds != null ? fromEnds : getPathDirection();
 	}
 
 	private static Vec3 travelDirection(Vec3 head, Vec3 tail) {
@@ -490,9 +513,12 @@ public class TrainServer extends Train {
 	 * knows how to hold it. Short gaps are better spent standing at the origin, which {@link #getTotalDwellTicks}
 	 * covers; only a long wait is worth clearing the platform for.
 	 *
-	 * Overriding isRepeat is what makes the train fall out of the loop, and it is deliberately latched rather than
-	 * recomputed every tick: the decision is taken once, while the train stands at the end of the loop, so that the
-	 * projected schedule does not flicker as the clock moves.
+	 * Overriding isRepeat is what makes the train fall out of the loop, and the decision is taken once per lap, as
+	 * the train pulls away from the origin. It used to be taken at the far end of the loop instead, which was too
+	 * late to be honest about: isRepeat also decides whether the projected schedule runs a second time round, so
+	 * until the train reached the end it kept advertising arrivals for a lap it had already been booked not to run.
+	 * Those arrivals then vanished all at once, which is the ghost departure, and every display showing one jumped
+	 * to a later train the moment it went.
 	 */
 	@Override
 	protected boolean isRepeat() {
@@ -502,6 +528,7 @@ public class TrainServer extends Train {
 	private void updateTimetableStabling() {
 		if (currentDepot == null || !currentDepot.strictTimetable || transportMode.continuousMovement) {
 			returningToDepot = false;
+			stablingDecided = false;
 			timetableDepartureMillis = -1;
 			wasHoldingAtOrigin = false;
 			return;
@@ -511,17 +538,59 @@ public class TrainServer extends Train {
 
 		if (!super.isRepeat()) {
 			returningToDepot = false;
+			stablingDecided = false;
 		} else if (!isOnRoute) {
 			// Back in the depot, so the decision has done its job and the normal dispatch gate takes over
 			returningToDepot = false;
-		} else if (speed <= 0 && getIndex(railProgress, false) >= repeatIndex2) {
-			// Standing at the end of the loop, the moment before it would otherwise wrap round
-			// The target already stepped on when the train pulled away from the origin, so it names the departure
-			// this train would run next. A train that is merely late has a target in the past and keeps going.
-			final long now = System.currentTimeMillis();
-			final long next = timetableDepartureMillis >= 0 ? timetableDepartureMillis : currentDepot.findDeparture(now, true);
-			returningToDepot = next >= 0 && next - now > currentDepot.getStablingThresholdMillis();
+			stablingDecided = false;
+		} else if (!stablingDecided && speed <= 0 && getIndex(railProgress, false) >= repeatIndex2) {
+			// Fallback for a train that never held at the origin this lap — a restart, or a timetable switched on
+			// mid-run. Deciding here is late, but it is better than not deciding.
+			decideStabling(0);
 		}
+	}
+
+	/**
+	 * Settles whether this train stables after the lap it is starting.
+	 *
+	 * The question is how long it would be left standing at the origin once it gets back there, so the answer needs
+	 * the run still ahead of it, not just the clock. Measuring from now alone would have the answer drift as the lap
+	 * went by, and the schedule drift with it.
+	 */
+	private void decideStabling(float remainingTicks) {
+		stablingDecided = true;
+		final long now = System.currentTimeMillis();
+		final long next = timetableDepartureMillis >= 0 ? timetableDepartureMillis : currentDepot.findDeparture(now, true);
+		if (next < 0) {
+			returningToDepot = false;
+			return;
+		}
+		// The stop the train is meant to make anyway is not idle time. Counting it as idle meant a train arriving a
+		// couple of minutes before its departure — which is simply a train on time, with a stop to make — read as
+		// having a long wait ahead of it and ran to the depot instead of stopping at all.
+		final long idle = next - now
+				- (long) (remainingTicks * Depot.MILLIS_PER_TICK)
+				- (long) (originDwellTicks() * Depot.MILLIS_PER_TICK);
+		returningToDepot = idle > currentDepot.getStablingThresholdMillis();
+	}
+
+	/** The stop the origin platform is scheduled for, which the train would be making whether or not it stabled. */
+	private int originDwellTicks() {
+		final int origin = getOriginIndex();
+		return origin >= 0 && origin < path.size() ? path.get(origin).dwellTime * 10 : 0;
+	}
+
+	/** Ticks of run left before this train reaches the end of its path, from the timing model it was built with. */
+	private float remainingRunTicks() {
+		if (timeSegments.isEmpty()) {
+			return 0;
+		}
+		for (final Siding.TimeSegment timeSegment : timeSegments) {
+			if (RailwayData.isBetween(railProgress, timeSegment.startRailProgress, timeSegment.endRailProgress)) {
+				return Math.max(0, timeSegments.get(timeSegments.size() - 1).endTime - (float) timeSegment.getTime(railProgress));
+			}
+		}
+		return 0;
 	}
 
 	/**
@@ -549,6 +618,9 @@ public class TrainServer extends Train {
 			if (timetableDepartureMillis >= 0) {
 				timetableDepartureMillis = currentDepot.findDeparture(timetableDepartureMillis + 1, true);
 			}
+			// Pulling away from the origin with the next departure now known, which is the earliest the question
+			// can be answered and the last moment it can be answered without having already lied about it.
+			decideStabling(remainingRunTicks());
 		}
 	}
 
@@ -668,6 +740,7 @@ public class TrainServer extends Train {
 			signalBlocks.clearTrainBlocked(id);
 		}
 		keepChunksAheadLoaded(world);
+		blockedThisTick = false;
 		if (speed > Train.ACCELERATION_DEFAULT) {
 			// Genuinely under way, rather than creeping against a block, so the next hold is a new event
 			lastHoldReported = -1;
@@ -679,6 +752,12 @@ public class TrainServer extends Train {
 		final boolean oldDoorOpen = doorTarget;
 
 		simulateTrain(world, ticksElapsed, depot);
+
+		if (blockedThisTick && speed <= Train.ACCELERATION_DEFAULT) {
+			heldTicks += Math.max(1, (int) ticksElapsed);
+		} else if (speed > Train.ACCELERATION_DEFAULT) {
+			heldTicks = 0;
+		}
 
 		final int nextDepartureTicks = isOnRoute ? 0 : depot.getNextDepartureMillis();
 		final long currentMillis = System.currentTimeMillis() - (long) (elapsedDwellTicks * Depot.MILLIS_PER_TICK) + (long) Math.max(0, nextDepartureTicks);
@@ -723,7 +802,9 @@ public class TrainServer extends Train {
 					}
 
 					if (isOnRoute || nextDepartureTicks >= 0) {
-						final long arrivalMillis = currentMillis + (long) ((timeSegment.endTime + offsetTime - currentTime) * Depot.MILLIS_PER_TICK);
+						// Plus whatever this vehicle has already lost standing still: the projection itself cannot
+						// see a hold, so without this the display counts down to a train that is not coming.
+						final long arrivalMillis = currentMillis + (long) ((timeSegment.endTime + offsetTime - currentTime + heldTicks) * Depot.MILLIS_PER_TICK);
 						addSchedule = () -> schedulesForPlatform.get(platformId).add(new ScheduleEntry(arrivalMillis, trainCars, timeSegment.routeId, timeSegment.currentStationIndex));
 						if (!isRepeat()) {
 							addSchedule.run();
@@ -778,7 +859,7 @@ public class TrainServer extends Train {
 		final Vec3 head = getHeadPosition();
 		final Vec3 tail = getTailPosition();
 		if (head != null && tail != null) {
-			signalBlocks.setTrainPosition(id, head, tail, isOnRoute);
+			signalBlocks.setTrainPosition(id, head, tail, myTravelDirection(), isOnRoute);
 		}
 		if (!path.isEmpty()) {
 			final int headIndex = getIndex(0, spacing, true);
@@ -800,8 +881,10 @@ public class TrainServer extends Train {
 	 * on it, which is what a long fast run does: the vehicle outruns everything the server has warm, and each new
 	 * chunk is fetched while somebody is already standing on top of it.
 	 *
-	 * Deliberately small. Only vehicles actually carrying somebody, only a few points along the way, and on a
-	 * ticket that expires by itself, so nothing has to be released and a forgotten vehicle cannot pin the map open.
+	 * Only vehicles actually carrying somebody, and on a ticket that expires by itself, so nothing has to be
+	 * released and a forgotten vehicle cannot pin the map open. How far ahead is read as seconds of running rather
+	 * than a fixed distance, because the distance that matters is the one the vehicle is about to cover, and both
+	 * that and its ceiling are the server operator's to set — see {@link ServerConfig}, where zero turns it off.
 	 * Straight-line extrapolation is enough at this range: it is aiming at chunks, not at track.
 	 */
 	private void keepChunksAheadLoaded(Level world) {
@@ -819,12 +902,24 @@ public class TrainServer extends Train {
 			return;
 		}
 		lastPreloadedChunk = here.toLong();
+		final double preloadSeconds = ServerConfig.preloadSeconds();
+		if (preloadSeconds <= 0) {
+			return;
+		}
+		final double lookAhead = Math.min(ServerConfig.preloadMaxBlocks(), Math.max(PRELOAD_STEP_BLOCKS * 4, speed * preloadSeconds * 20));
 		final Vec3 step = direction.normalize().scale(PRELOAD_STEP_BLOCKS);
+		final ServerLevel serverLevel = (ServerLevel) world;
 		Vec3 ahead = head;
-		for (int i = 0; i < PRELOAD_STEPS; i++) {
+		long lastAsked = here.toLong();
+		for (double travelled = 0; travelled < lookAhead; travelled += PRELOAD_STEP_BLOCKS) {
 			ahead = ahead.add(step);
-			((ServerLevel) world).getChunkSource().addRegionTicket(
-					PRELOAD_TICKET, new ChunkPos(RailwayData.newBlockPos(ahead)), 0, Unit.INSTANCE);
+			final ChunkPos chunkPos = new ChunkPos(RailwayData.newBlockPos(ahead));
+			if (chunkPos.toLong() == lastAsked) {
+				// Stepping along the line lands in the same chunk repeatedly; ask once per chunk, not once per step
+				continue;
+			}
+			lastAsked = chunkPos.toLong();
+			serverLevel.getChunkSource().addRegionTicket(PRELOAD_TICKET, chunkPos, 0, Unit.INSTANCE);
 		}
 	}
 

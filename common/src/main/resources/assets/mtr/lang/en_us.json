@@ -822,5 +822,7 @@
 	"gui.mtr.stabling_threshold": "Return to Depot After",
 	"gui.mtr.stabling_threshold_value": "%s min",
 	"options.mtr.use_frustum_culling": "Skip drawing what is off screen",
-	"options.mtr.use_frustum_culling.tooltip": "Nothing the mod draws goes through Minecraft's own culling, so without this every train and sign in range is drawn even when it is behind you. Turn it off if parts of a train vanish while you are riding it — that would mean the culling is wrong on your setup, and it is worth telling the server about."
+	"options.mtr.use_frustum_culling.tooltip": "Nothing the mod draws goes through Minecraft's own culling, so without this every train and sign in range is drawn even when it is behind you. Turn it off if parts of a train vanish while you are riding it — that would mean the culling is wrong on your setup, and it is worth telling the server about.",
+	"options.mtr.show_arrival_clock_time": "Show when trains are due, not how long until they arrive",
+	"options.mtr.show_arrival_clock_time.tooltip": "Displays the time a train is due instead of counting down to it. A countdown has to revise itself whenever a train runs late, and a revised countdown reads as a fault even when it is telling the truth. A due time simply becomes a later due time."
 }
