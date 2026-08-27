@@ -7,7 +7,11 @@ import mtr.path.PathData;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.TicketType;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.util.Mth;
+import net.minecraft.util.Unit;
 import net.minecraft.world.Container;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
@@ -49,6 +53,13 @@ public class TrainServer extends Train {
 	 * enough to cover the braking curve at line speed, and the ceiling on how close trains will ever bunch up.
 	 */
 	private static final double SAFE_FOLLOWING_DISTANCE = 48;
+	/** How far apart the points ahead of a carrying vehicle are, and how many of them, when warming chunks. */
+	private static final int PRELOAD_STEP_BLOCKS = 32;
+	private static final int PRELOAD_STEPS = 3;
+	/** Expires on its own after ten seconds, so nothing here ever has to be released. */
+	private static final TicketType<Unit> PRELOAD_TICKET = TicketType.create("mtr_vehicle_ahead", (a, b) -> 0, 200);
+	/** The chunk this vehicle last warmed from, so it asks once per chunk crossed rather than once per tick. */
+	private long lastPreloadedChunk = Long.MIN_VALUE;
 	/** Path rails scanned ahead when looking for a train to follow. */
 	private static final int FOLLOWING_LOOKAHEAD = 48;
 
@@ -656,6 +667,7 @@ public class TrainServer extends Train {
 			// Cleared before this train's own checks run; isRailBlocked sets it again if it is still held up
 			signalBlocks.clearTrainBlocked(id);
 		}
+		keepChunksAheadLoaded(world);
 		if (speed > Train.ACCELERATION_DEFAULT) {
 			// Genuinely under way, rather than creeping against a block, so the next hold is a new event
 			lastHoldReported = -1;
@@ -777,6 +789,42 @@ public class TrainServer extends Train {
 					signalBlocks.occupy(pathData.getRailProduct(), trainPositions, id);
 				}
 			}
+		}
+	}
+
+	/**
+	 * Asks the server to keep the chunks a short way ahead of a carrying vehicle in memory.
+	 *
+	 * This does not make a client receive chunks any faster — that is the game's own business and nothing here can
+	 * change it. What it does fix is the server being caught loading ground off disk at the moment a rider arrives
+	 * on it, which is what a long fast run does: the vehicle outruns everything the server has warm, and each new
+	 * chunk is fetched while somebody is already standing on top of it.
+	 *
+	 * Deliberately small. Only vehicles actually carrying somebody, only a few points along the way, and on a
+	 * ticket that expires by itself, so nothing has to be released and a forgotten vehicle cannot pin the map open.
+	 * Straight-line extrapolation is enough at this range: it is aiming at chunks, not at track.
+	 */
+	private void keepChunksAheadLoaded(Level world) {
+		if (ridingEntities.isEmpty() || speed <= 0 || !(world instanceof ServerLevel)) {
+			return;
+		}
+		final Vec3 head = getHeadPosition();
+		final Vec3 direction = myTravelDirection();
+		if (head == null || direction == null) {
+			return;
+		}
+		final ChunkPos here = new ChunkPos(RailwayData.newBlockPos(head));
+		if (here.toLong() == lastPreloadedChunk) {
+			// Only when the vehicle crosses into a new chunk, rather than every tick it spends in one
+			return;
+		}
+		lastPreloadedChunk = here.toLong();
+		final Vec3 step = direction.normalize().scale(PRELOAD_STEP_BLOCKS);
+		Vec3 ahead = head;
+		for (int i = 0; i < PRELOAD_STEPS; i++) {
+			ahead = ahead.add(step);
+			((ServerLevel) world).getChunkSource().addRegionTicket(
+					PRELOAD_TICKET, new ChunkPos(RailwayData.newBlockPos(ahead)), 0, Unit.INSTANCE);
 		}
 	}
 

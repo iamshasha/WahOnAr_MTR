@@ -737,7 +737,12 @@ public class RailwayData extends PersistentStateMapper implements IPacket {
 	}
 
 	public static boolean chunkLoaded(Level world, BlockPos pos) {
-		return world.getChunkSource().getChunkNow(pos.getX() / 16, pos.getZ() / 16) != null && world.hasChunk(pos.getX() / 16, pos.getZ() / 16);
+		// Shift, not divide. Integer division truncates towards zero, so a block at x = -5 asked about chunk 0
+		// instead of chunk -1: every one of these checks has been answering about the wrong chunk anywhere west or
+		// north of the origin, which is what gates door scanning, lift movement and rail node checks there.
+		final int chunkX = pos.getX() >> 4;
+		final int chunkZ = pos.getZ() >> 4;
+		return world.getChunkSource().getChunkNow(chunkX, chunkZ) != null && world.hasChunk(chunkX, chunkZ);
 	}
 
 	public static String prettyPrint(JsonElement jsonElement) {
