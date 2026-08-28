@@ -5,6 +5,31 @@ The Wah On Ar build of Minecraft Transit Railway. This is a modified fork, not t
 build, so these numbers will not match anything on the MTR project's site.
 
 Also published, with the Traditional Chinese version, at the server's own site.
+## 3.5.0 — 28 August 2026
+
+### Implemented  
+
+- **MTR 4 train packs can now be installed.**
+  MTR 4 rewrote the resource pack format. Both formats use the same file name and share almost nothing else, so
+  before this version an MTR 4 pack loaded as an empty pack: no train, no error, nothing in the log. Those packs
+  now load. The format is worked out from the shape of the file, so a pack written for MTR 3 is read exactly as it
+  was before and is not affected by any of this.
+
+  What comes across: the train, its name, colour, description, dimensions, bogie spacing, sounds, gangways and
+  barriers; every model layer with its own texture; each part's render stage, its condition, its positions on both
+  sides of the car, and its doors; and text displays, including scrolling ones. Signs come across too.
+
+- **One MTR 4 vehicle is one carriage, not a whole train.**
+  MTR 4 packs ship a vehicle per carriage type — a trailer, a front cab, a back cab — and MTR 4 lets a driver
+  couple them together in the depot. MTR 3 picks one type for the whole train, so each of those carriage types
+  appears in the train list on its own, and a train is made of one of them throughout. This is the shape of the
+  format rather than something that can be worked around here.
+
+- **What an MTR 4 pack contains that MTR 3 has nowhere to put is skipped, and said so in the log.**
+  Custom rails, eyecandy objects and lift skins; `.obj` and `.mqo` models; floor, doorway and seat markers; depot
+  and Christmas light conditions; departure index and route colour displays; bogie models; and gangways on only
+  one end of a car. Nothing is approximated silently — if a pack loses something, the log names it.
+
 ## 3.4.3 — 28 August 2026
 
 ### Implemented  

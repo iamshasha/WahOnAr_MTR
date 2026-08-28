@@ -292,13 +292,37 @@ Everything else in Done was checked against the code and is accurate. Do the sam
   outright, so it needs the same rule or the feature is a silent no-op on this server.**
 - [x] **Manual shipped** at `/mtr-manual/` — 10 pages, EN + zh, worked examples, ANTE chrome/tokens/transitions reused and sharing its `star-prefs` key. **Trap:** the `<div class="shell">` wrapper between `</header>` and `<nav>` is the sidebar grid and page padding; lifting only the header drops it and the whole layout flattens. Verify visually with a screenshot, not by extracting text — text extraction passes on a page with no CSS at all.
 - [ ] **Build + deploy** the Fabric 1.19.4 jar.
-- [ ] **MTR 4 pack support — deprioritised, do last.**
+- [x] **MTR 4 pack support.** `mtr.client.Mtr4CustomResources` reads the MTR 4 `mtr_custom_resources.json` and
+  restates it in MTR 3's terms; `CustomResources.reload` recognises the format by shape and registers the result
+  through the same `DynamicTrainModel` + `TrainClientRegistry` the MTR 3 path uses. Checked by
+  `checks/Mtr4PackCheck.java`. The mapping is the inverse of MTR 4's own `CustomResourcesConverter`
+  (`fabric/src/main/java/org/mtr/legacy/resource/` in the MTR 4 tree), which is the authority wherever the two
+  formats disagree — including that MTR 4's `length` counts the coupling gap and MTR 3's does not.
+
+  **The multi-layer blocker was the real work.** `mtr.client.LayeredTrainModel` holds N `DynamicTrainModel`s and
+  hands each its own texture, which needed `ModelTrainBase.render` to stop being `final` — descriptor unchanged,
+  so nothing ANTE binds to moved. Model entries are gathered by the `(model file, texture)` pair they share, not
+  merged: MTR 4 lists one entry per properties file and the same `.bbmodel` appears several times over, so the
+  Seoul pack's 4–6 entries collapse to 2–3 layers with no geometry surgery at all.
+
+  Two other traps. A display part draws only text in MTR 4 and both text and geometry in MTR 3; it is given a
+  `stage` of `TEXT_ONLY`, which no `RenderStage` is named, so the geometry pass skips it and the text pass — which
+  never looks at the stage — still draws. And MTR 4 packs name gangway faces `<id>_side.png` where MTR 3 wants
+  `<id>_connector_side.png`, so `JonModelTrainRenderer.getConnectorTextureString` now falls back to the shorter
+  name, MTR 3's name still being asked for first.
+
+  Not supportable, all named in the log rather than faked: custom rails, eyecandy objects, lift skins, `.obj` and
+  `.mqo` models, floor/doorway/seat markers, `AT_DEPOT` and Christmas-light conditions, departure-number and
+  route-colour displays, the display options beyond scroll/upper-case/single-line, bogie models, coupling padding,
+  a gangway on one end only, and gangway/barrier dimensions. A per-carriage MTR 4 vehicle also cannot become part
+  of a mixed consist: MTR 3 picks one train type for the whole train, so each carriage type lands in the list on
+  its own.
 
 ## MTR 4 findings (pack: `D:\Agents\seoul_metro_4000_4_mtr4.zip`)
 
 Format maps mechanically: `.bbmodel` is the same Blockbench format `DynamicTrainModel` already parses; `vehicles[]` array vs MTR3's `custom_trains{}` map; `names[]` → one part each; `positionDefinitions[]` resolved via `assets/mtr/definitions/*.json` → `positions` (drop y, MTR3 reads x/z); `renderStage`→`stage`; `doorXMultiplier`→`door_x_multiplier`; `length`/`width` → `base_train_type`.
 
-**Blocker:** every vehicle uses multiple model layers with multiple textures — trailer 4 layers / 2 textures, cabs 5–6 layers / 3 textures. MTR3's `TrainProperties` holds one model and one `texture_id`. Keeping only the first layer loses all labels and the cab fronts. Real fix is to let MTR3 hold a *list* of model layers; `scheduleRender` already batches by texture, so N layers is N calls with different `ResourceLocation`s.
+**Blocker (solved in 3.5.0, see above):** every vehicle uses multiple model layers with multiple textures — trailer 4 layers / 2 textures, cabs 5–6 layers / 3 textures. MTR3's `TrainProperties` holds one model and one `texture_id`. Keeping only the first layer loses all labels and the cab fronts. Real fix is to let MTR3 hold a *list* of model layers; `scheduleRender` already batches by texture, so N layers is N calls with different `ResourceLocation`s.
 
 ## Site / deploy notes
 

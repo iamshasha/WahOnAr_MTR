@@ -38,6 +38,13 @@ public class CustomResources implements IResourcePackCreatorProperties, ICustomR
 		final List<String> customTrains = new ArrayList<>();
 
 		readResource(manager, MTR.MOD_ID + ":" + CUSTOM_RESOURCES_ID + ".json", jsonConfig -> {
+			// A pack written for MTR 4 uses the same file name and nothing else in common, so it is recognised
+			// here and restated in MTR 3's own terms before any of the loading below sees it.
+			if (Mtr4CustomResources.isMtr4Format(jsonConfig)) {
+				loadMtr4Resources(manager, jsonConfig, customTrains);
+				return;
+			}
+
 			try {
 				jsonConfig.get(CUSTOM_TRAINS_KEY).getAsJsonObject().entrySet().forEach(entry -> {
 					try {
@@ -117,21 +124,7 @@ public class CustomResources implements IResourcePackCreatorProperties, ICustomR
 			}
 
 			try {
-				jsonConfig.get(CUSTOM_SIGNS_KEY).getAsJsonObject().entrySet().forEach(entry -> {
-					try {
-						final JsonObject jsonObject = entry.getValue().getAsJsonObject();
-
-						final boolean flipTexture = getOrDefault(jsonObject, CUSTOM_SIGNS_FLIP_TEXTURE, false, JsonElement::getAsBoolean);
-						final String customText = getOrDefault(jsonObject, CUSTOM_SIGNS_CUSTOM_TEXT, "", JsonElement::getAsString);
-						final boolean flipCustomText = getOrDefault(jsonObject, CUSTOM_SIGNS_FLIP_CUSTOM_TEXT, false, JsonElement::getAsBoolean);
-						final boolean small = getOrDefault(jsonObject, CUSTOM_SIGNS_SMALL, false, JsonElement::getAsBoolean);
-						final int backgroundColor = getOrDefault(jsonObject, CUSTOM_SIGNS_BACKGROUND_COLOR, 0, jsonElement -> colorStringToInt(jsonElement.getAsString()));
-
-						CUSTOM_SIGNS.put(CUSTOM_SIGN_ID_PREFIX + entry.getKey(), new CustomSign(new ResourceLocation(jsonObject.get(CUSTOM_SIGNS_TEXTURE_ID).getAsString()), flipTexture, customText, flipCustomText, small, backgroundColor));
-					} catch (Exception e) {
-						e.printStackTrace();
-					}
-				});
+				loadCustomSigns(jsonConfig.get(CUSTOM_SIGNS_KEY).getAsJsonObject());
 			} catch (Exception ignored) {
 			}
 		});
@@ -142,6 +135,64 @@ public class CustomResources implements IResourcePackCreatorProperties, ICustomR
 		customTrains.forEach(System.out::println);
 		System.out.println("Loaded " + CUSTOM_SIGNS.size() + " custom sign(s)");
 		CUSTOM_SIGNS.keySet().forEach(System.out::println);
+	}
+
+	private static void loadCustomSigns(JsonObject customSignsObject) {
+		customSignsObject.entrySet().forEach(entry -> {
+			try {
+				final JsonObject jsonObject = entry.getValue().getAsJsonObject();
+
+				final boolean flipTexture = getOrDefault(jsonObject, CUSTOM_SIGNS_FLIP_TEXTURE, false, JsonElement::getAsBoolean);
+				final String customText = getOrDefault(jsonObject, CUSTOM_SIGNS_CUSTOM_TEXT, "", JsonElement::getAsString);
+				final boolean flipCustomText = getOrDefault(jsonObject, CUSTOM_SIGNS_FLIP_CUSTOM_TEXT, false, JsonElement::getAsBoolean);
+				final boolean small = getOrDefault(jsonObject, CUSTOM_SIGNS_SMALL, false, JsonElement::getAsBoolean);
+				final int backgroundColor = getOrDefault(jsonObject, CUSTOM_SIGNS_BACKGROUND_COLOR, 0, jsonElement -> colorStringToInt(jsonElement.getAsString()));
+
+				CUSTOM_SIGNS.put(CUSTOM_SIGN_ID_PREFIX + entry.getKey(), new CustomSign(new ResourceLocation(jsonObject.get(CUSTOM_SIGNS_TEXTURE_ID).getAsString()), flipTexture, customText, flipCustomText, small, backgroundColor));
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
+		});
+	}
+
+	/**
+	 * Registers everything an MTR 4 pack declares that MTR 3 has somewhere to put. The conversion itself is in
+	 * {@link Mtr4CustomResources}; what happens here is only the reading of the files it asks for and the same
+	 * registration the MTR 3 path does, so an MTR 4 train ends up as an ordinary entry in the train registry.
+	 */
+	private static void loadMtr4Resources(ResourceManager manager, JsonObject jsonConfig, List<String> customTrains) {
+		final Mtr4CustomResources.Result result = Mtr4CustomResources.convert(jsonConfig, path -> readResourceOnce(manager, path));
+
+		result.trains.forEach(train -> {
+			final List<DynamicTrainModel> models = new ArrayList<>();
+			final List<ResourceLocation> textures = new ArrayList<>();
+
+			train.layers.forEach(layer -> {
+				final JsonObject jsonModel = readResourceOnce(manager, layer.modelResource);
+				if (jsonModel == null) {
+					System.out.println("MTR 4 pack: " + train.id + " names a model the pack does not ship: " + layer.modelResource);
+					return;
+				}
+				Mtr4CustomResources.normalizeBlockbenchModel(jsonModel, layer.modelYOffset);
+				models.add(new DynamicTrainModel(jsonModel, layer.properties, train.doorAnimationType));
+				textures.add(new ResourceLocation(layer.textureId + ".png"));
+			});
+
+			if (models.isEmpty()) {
+				return;
+			}
+
+			final ModelTrainBase model = models.size() == 1 ? models.get(0) : new LayeredTrainModel(models, textures, train.doorAnimationType);
+			final String soundBaseId = train.useBveSound ? train.bveSoundBaseId : train.speedSoundBaseId;
+			final JonTrainSound.JonTrainSoundConfig soundConfig = train.useBveSound ? null : new JonTrainSound.JonTrainSoundConfig(train.doorSoundBaseId, train.speedSoundCount, train.doorCloseSoundTime, train.accelSoundAtCoast, train.constPlaybackSpeed);
+
+			TrainClientRegistry.register(train.id, train.baseTrainType, train.name, train.description, train.wikipediaArticle, model, train.layers.get(0).textureId, train.color, train.gangwayConnectionId, train.trainBarrierId, train.riderOffset, train.riderOffset, train.bogiePosition, false, soundBaseId, soundConfig);
+			customTrains.add(train.id);
+		});
+
+		loadCustomSigns(result.customSigns);
+
+		result.notes.forEach(note -> System.out.println("MTR 4 pack: " + note));
 	}
 
 	public static int colorStringToInt(String string) {
@@ -168,6 +219,13 @@ public class CustomResources implements IResourcePackCreatorProperties, ICustomR
 			});
 		} catch (Exception ignored) {
 		}
+	}
+
+	/** The last pack in the stack wins, which is how a pack that overrides another's model is meant to behave. */
+	private static JsonObject readResourceOnce(ResourceManager manager, String path) {
+		final JsonObject[] jsonObject = {null};
+		readResource(manager, path, json -> jsonObject[0] = json);
+		return jsonObject[0];
 	}
 
 	private static <T> T getOrDefault(JsonObject jsonObject, String key, T defaultValue, Function<JsonElement, T> function) {

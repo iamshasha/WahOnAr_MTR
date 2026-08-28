@@ -254,22 +254,28 @@ public class JonModelTrainRenderer extends TrainRendererBase implements IGui {
 	/** What a missing texture falls back to when there is no base type to borrow one from: literally nothing. */
 	private static final ResourceLocation TRANSPARENT_TEXTURE = new ResourceLocation("mtr:textures/block/transparent.png");
 
+	/** Whether the pack ships this texture, remembered so that a miss is looked up and complained about once. */
+	private static boolean hasTexture(String textureString) {
+		if (RenderTrains.AVAILABLE_TEXTURES.contains(textureString)) {
+			return true;
+		}
+		if (RenderTrains.UNAVAILABLE_TEXTURES.contains(textureString)) {
+			return false;
+		}
+
+		final boolean available = UtilitiesClient.hasResource(new ResourceLocation(textureString));
+		(available ? RenderTrains.AVAILABLE_TEXTURES : RenderTrains.UNAVAILABLE_TEXTURES).add(textureString);
+		if (!available) {
+			System.out.println("Texture " + textureString + " not found, using default");
+		}
+		return available;
+	}
+
 	private ResourceLocation resolveTextureUncached(String textureId, Function<String, String> formatter) {
 		final String textureString = formatter.apply(textureId);
 		final ResourceLocation id = new ResourceLocation(textureString);
-		final boolean available;
 
-		if (!RenderTrains.AVAILABLE_TEXTURES.contains(textureString) && !RenderTrains.UNAVAILABLE_TEXTURES.contains(textureString)) {
-			available = UtilitiesClient.hasResource(id);
-			(available ? RenderTrains.AVAILABLE_TEXTURES : RenderTrains.UNAVAILABLE_TEXTURES).add(textureString);
-			if (!available) {
-				System.out.println("Texture " + textureString + " not found, using default");
-			}
-		} else {
-			available = RenderTrains.AVAILABLE_TEXTURES.contains(textureString);
-		}
-
-		if (available) {
+		if (hasTexture(textureString)) {
 			return id;
 		} else {
 			final TrainRendererBase baseRenderer = TrainClientRegistry.getTrainProperties(train.baseTrainType).renderer;
@@ -284,7 +290,13 @@ public class JonModelTrainRenderer extends TrainRendererBase implements IGui {
 		if (cached != null) {
 			return cached;
 		}
-		final ResourceLocation resolved = resolveTextureUncached(isConnector ? gangwayConnectionId : trainBarrierId, textureId -> String.format("%s_%s_%s.png", textureId, isConnector ? "connector" : "barrier", partName));
+		final ResourceLocation resolved = resolveTextureUncached(isConnector ? gangwayConnectionId : trainBarrierId, textureId -> {
+			// MTR 3 names a gangway or barrier face by putting "connector" or "barrier" between the id and the
+			// face; MTR 4 packs leave that word out. Ask for MTR 3's name first, so nothing an existing pack
+			// ships changes, and only fall back to the shorter one when the pack does not have it.
+			final String name = String.format("%s_%s_%s.png", textureId, isConnector ? "connector" : "barrier", partName);
+			return hasTexture(name) ? name : String.format("%s_%s.png", textureId, partName);
+		});
 		connectorTextures.put(key, resolved);
 		return resolved;
 	}
