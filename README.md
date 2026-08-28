@@ -15,6 +15,11 @@
 > addons and train packs that do not follow — all of it is written down in
 > **[MIGRATION.md](MIGRATION.md)**. Nothing has been decided.
 >
+> **Branches.** `main` is the **MTR 3** line — it is what the server runs and what every release is cut
+> from. `MTR-4-DEV` is where the MTR 4 work happens, with its own changelog
+> ([CHANGELOG-MTR4.md](../../blob/MTR-4-DEV/CHANGELOG-MTR4.md)). It is not merged back, and nothing on it
+> ships, until the migration is actually agreed.
+>
 > ### 這是修改版本，並非原版
 >
 > 本倉庫是 [Minecraft Transit Railway](https://github.com/Minecraft-Transit-Railway/Minecraft-Transit-Railway)（作者 Jonathan Ho）
@@ -29,6 +34,11 @@
 > 遷移的理由、期間如何令 MTR 3 保持穩定、萬一出事如何備份與還原世界、
 > 以及不支援 MTR 4 的擴充模組和列車包會如何處理，全部寫在
 > **[MIGRATION.zh-Hant.md](MIGRATION.zh-Hant.md)**。目前尚未有任何決定。
+>
+> **分支。**`main` 是 **MTR 3** 這條線 —— 伺服器執行的就是它，每一個發佈版本也都從它切出。
+> `MTR-4-DEV` 是 MTR 4 工作所在的分支，並且有自己的更新紀錄
+> （[CHANGELOG-MTR4.md](../../blob/MTR-4-DEV/CHANGELOG-MTR4.md)）。
+> 在遷移真正拍板之前，它不會合併回來，上面的東西也不會出貨。
 
 # Minecraft Transit Railway 3.0
 
