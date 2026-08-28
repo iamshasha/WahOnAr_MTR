@@ -3,6 +3,13 @@
 華安亞版本的 Minecraft Transit Railway。這是修改版分支，並非原版 —— 詳見 [README](README.md)。
 上游只到 3.2.2-hotfix-1；由 3.2.3 起的每一個版本都是本伺服器自行建置的，因此這些版本號在 MTR 官方網站上找不到。
 
+## 3.4.3 — 2026年8月28日
+
+### 新增
+
+- **Java版本警告**
+  如果您的Java版本低於Java 21，Minecraft啟動時將會有警告。這是因為更新的版本中，部分引擎基於Java 21建制，導致低於Java 21之客戶端將無法加載模組。在v3.5.1後，**低於Java 21的客戶端將無法啟動Minecraft**。因此我們強烈建議您盡早升級，以確保您的體驗。 [瞭解如何升級](https://srn.netartisan.site/mtr-manual/java-update)
+
 ## 3.4.2 — 2026年8月28日
 
 ### 修正

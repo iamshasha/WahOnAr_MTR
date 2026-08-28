@@ -468,6 +468,15 @@ public class MTR implements IPacket {
 				Runtime.getRuntime().halt(0);
 			}
 		});
+		if (JavaVersionNotice.upgradeNeeded()) {
+			// An operator sees this once at startup, in the log they already read when something is wrong, rather
+			// than having to find out on the day MTR 4 refuses to load
+			System.out.printf("MTR: this server runs Java %s. MTR requires Java %d from 3.5.1, and MTR 4 needs it too. "
+							+ "Minecraft 1.19.4 runs on it already. See %s%n",
+					JavaVersionNotice.currentVersion(), JavaVersionNotice.REQUIRED_FOR_MTR_4,
+					JavaVersionNotice.GUIDE_URL);
+		}
+
 		Registry.registerPlayerJoinEvent(player -> {
 			PacketTrainDataGuiServer.versionCheckS2C(player);
 			final RailwayData railwayData = RailwayData.getInstance(player.getLevel());

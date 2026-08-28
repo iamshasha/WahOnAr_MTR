@@ -5,6 +5,12 @@ The Wah On Ar build of Minecraft Transit Railway. This is a modified fork, not t
 build, so these numbers will not match anything on the MTR project's site.
 
 Also published, with the Traditional Chinese version, at the server's own site.
+## 3.4.3 — 28 August 2026
+
+### Implemented  
+
+- **Java version notice.**
+  On Java version lower than 21, there will be a notice screen when you launched your Minecraft instance. If this screen shows up, we strongly suggest you to upgrade your Java version because MTR 4's engine is built for Java 21, which is an upcoming update. Starting v3.5.1, the Java 21 will be required, any Minecraft instance below Java 21 will not load properly. [Learn More](https://srn.netartisan.site/mtr-manual/java-update) about how to update. After you update, the screen will not show again.
 
 ## 3.4.2 — 28 August 2026
 
