@@ -63,6 +63,26 @@ public class DepartureLedger {
 		return best;
 	}
 
+	/**
+	 * How long a vehicle should stand at a timetabled origin, in ticks.
+	 *
+	 * The booked time is when it leaves, so an early vehicle waits for it: the stop stretches to cover whatever is
+	 * left. Expressed as a dwell length rather than as a block because the doors are driven off the dwell, and
+	 * anything that reads the dwell then closes them in time of its own accord.
+	 *
+	 * A vehicle that is already late gets the ordinary stop, not a shortened one. Cutting the stop to nothing to
+	 * claw back time sounds right and is not: the doors are told to shut in the same tick the dwell ends, so the
+	 * vehicle pulls away while they are still moving, and the closing sound plays behind a train that has already
+	 * left. It also gives passengers no time to board, which is what the stop is for.
+	 */
+	public static int timetabledDwellTicks(int baseDwellTicks, double elapsedDwellTicks, long untilDepartureMillis, double millisPerTick) {
+		final double untilDepartureTicks = untilDepartureMillis / millisPerTick;
+		// Constant for the whole stop: elapsed climbs by exactly what remaining loses, so this stays at however
+		// many ticks the booked departure was away when the vehicle pulled in. Once that is behind it, the sum
+		// falls below the ordinary dwell and the ordinary dwell is what is left.
+		return Math.max(baseDwellTicks, (int) Math.ceil(elapsedDwellTicks + untilDepartureTicks));
+	}
+
 	public boolean isSpent(long departure) {
 		return departure <= floor || consumed.contains(departure);
 	}

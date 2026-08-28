@@ -6,6 +6,31 @@ build, so these numbers will not match anything on the MTR project's site.
 
 Also published, with the Traditional Chinese version, at the server's own site.
 
+## 3.4.2 — 28 August 2026
+
+### Fixes
+
+- **Doors closed after the train had already pulled away.** A train held at a timetabled origin is held by
+  stretching its stop, and a train that reached its booked time with the stop already over was given a stop of
+  nothing at all. The doors were told to shut and the train was told to start in the same instant, so the closing
+  ran — animation, sound and all — behind a train that had left. The reasoning behind that was wrong twice over: a
+  train cannot leave with its doors open, and a stop cut to nothing gives passengers no time to board, which is
+  what the stop is for. A train that is behind time now makes its ordinary stop and leaves a little late, which is
+  what a railway does.
+
+## 3.4.1 — 28 August 2026
+
+### Fixes
+
+- **A rail's own speed was only ever remembered until the next restart.** 3.4.0 began writing each high-speed
+  rail's speed onto the rail itself, so that the number would outlive the name of its type. It never reached the
+  disk. Whether a file needs rewriting is decided by comparing what is held in memory against what was recorded
+  when the file was read — and the speed was being written on during reading, so by the time the comparison
+  happened the two already agreed and the file was left alone. The value lived for as long as the server did and
+  was gone by the next start. A rail written to in this way now says so, and is saved once.
+
+`Minecraft_Transit_Railway_1.19.4_3.4.2.jar` · 62,815,109 B · `sha256 e7e290917592177b595b49511e6004a1d6994484dbfe6227275b1bf315ea275f`
+
 ## 3.4.0 — 28 August 2026
 
 ### Fixes

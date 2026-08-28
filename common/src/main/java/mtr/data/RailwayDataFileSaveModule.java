@@ -234,7 +234,13 @@ public class RailwayDataFileSaveModule extends RailwayDataModuleBase {
 										callback.accept(data);
 									}
 
-									existingFiles.put(idFile, getHash(data, true));
+									// Recorded so the saver can tell later whether the file still matches what is held
+									// in memory. A rail that was stamped while being read does not match any more, and
+									// recording the hash of the stamped object would hide that, so it is deliberately
+									// recorded as something the object cannot hash to.
+									final int loadedHash = getHash(data, true);
+									existingFiles.put(idFile, data instanceof RailEntry && ((RailEntry) data).anyStampedOnLoad()
+											? ~loadedHash : loadedHash);
 								} catch (Exception e) {
 									e.printStackTrace();
 								}
@@ -329,6 +335,11 @@ public class RailwayDataFileSaveModule extends RailwayDataModuleBase {
 		public RailEntry(BlockPos pos, Map<BlockPos, Rail> connections) {
 			this.pos = pos;
 			this.connections = connections;
+		}
+
+		/** Whether any rail here had a speed written onto it while being read; see {@link Rail#stampedOnLoad}. */
+		public boolean anyStampedOnLoad() {
+			return connections.values().stream().anyMatch(rail -> rail.stampedOnLoad);
 		}
 
 		public RailEntry(Map<String, Value> map) {

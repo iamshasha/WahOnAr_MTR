@@ -683,16 +683,8 @@ public class TrainServer extends Train {
 			return base;
 		}
 
-		final long untilDeparture = timetableDepartureMillis - System.currentTimeMillis();
-		if (untilDeparture <= 0) {
-			// Already past its booked time, so the stop is what is costing it. It leaves straight away without
-			// dwelling and makes the rest up on the run; standing here would only push it further behind.
-			return 0;
-		}
-		// Hold exactly as long as is left, measured from where the dwell has already got to. The doors look after
-		// themselves: openDoors shuts them a door cycle before this total runs out, so they close on the booked
-		// departure rather than after the nominal dwell.
-		return Math.max(base, (int) Math.ceil(elapsedDwellTicks + (double) untilDeparture / Depot.MILLIS_PER_TICK));
+		return DepartureLedger.timetabledDwellTicks(base, elapsedDwellTicks,
+				timetableDepartureMillis - System.currentTimeMillis(), Depot.MILLIS_PER_TICK);
 	}
 
 	@Override
