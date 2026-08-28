@@ -1,0 +1,291 @@
+From c39c08ce43362531662c29cbff9d5513bc31c35e Mon Sep 17 00:00:00 2001
+From: iamshasha <xred379@gmail.com>
+Date: Fri, 28 Aug 2026 17:42:22 +0800
+Subject: [PATCH] Carry a legacy rail's real speed through the converter
+
+MTR 3 records a rail's speed in two places: the name of its type, and, since
+MTR 3.4.0, a number on the rail itself. The converter only ever read the name.
+It resolves that name against the sixteen types upstream MTR has always had and
+falls back to WOODEN, 20 km/h, for anything else -- silently, and with nothing
+left to recover from, because the name was the only record of what the rail was.
+
+Every rail an addon contributed hits that fallback. On the Wah On Ar world that
+is two populations: the five types the High Speed Rails addon added, which run
+at 450 to 800 km/h, and roughly 640 types MTR-ANTE creates at runtime, one per
+km/h, named P-1 through P600 and then P1000 to P10000 in steps of 500. Between
+them they cover most of the high-speed network.
+
+Three changes, none of which affect a world that has neither:
+
+- The legacy schema keeps the rail's own speed_limit, which it was discarding.
+- DataFixer knows the five absorbed types, and reads a speed out of a P### name.
+- LegacyRailLoader carries a speed per direction rather than only a rail type,
+  so a one-way rail keeps a different limit each way, as it does in MTR 3.
+
+The saved number wins over both, since a builder may have set it by hand.
+---
+ .../schema/legacy/railNodeConnection.json     |  3 +
+ .../java/org/mtr/legacy/data/DataFixer.java   | 41 ++++++++++++-
+ .../org/mtr/legacy/data/LegacyRailLoader.java | 22 +++++--
+ .../mtr/legacy/data/RailNodeConnection.java   | 15 +++++
+ .../mtr/legacy/data/LegacyRailSpeedTests.java | 61 +++++++++++++++++++
+ .../org/mtr/legacy/data/package-info.java     |  7 +++
+ 6 files changed, 143 insertions(+), 6 deletions(-)
+ create mode 100644 src/test/java/org/mtr/legacy/data/LegacyRailSpeedTests.java
+ create mode 100644 src/test/java/org/mtr/legacy/data/package-info.java
+
+diff --git a/buildSrc/src/main/resources/schema/legacy/railNodeConnection.json b/buildSrc/src/main/resources/schema/legacy/railNodeConnection.json
+index 0f67a24..42c90e4 100644
+--- a/buildSrc/src/main/resources/schema/legacy/railNodeConnection.json
++++ b/buildSrc/src/main/resources/schema/legacy/railNodeConnection.json
+@@ -59,6 +59,9 @@
+ 		"rail_type": {
+ 			"type": "string"
+ 		},
++		"speed_limit": {
++			"type": "integer"
++		},
+ 		"transportMode": {
+ 			"$ref": "TransportMode"
+ 		},
+diff --git a/src/main/java/org/mtr/legacy/data/DataFixer.java b/src/main/java/org/mtr/legacy/data/DataFixer.java
+index 680e737..b55e7a3 100644
+--- a/src/main/java/org/mtr/legacy/data/DataFixer.java
++++ b/src/main/java/org/mtr/legacy/data/DataFixer.java
+@@ -20,6 +20,8 @@ import org.mtr.core.tool.Utilities;
+ 
+ import java.util.Locale;
+ import java.util.function.BiConsumer;
++import java.util.regex.Matcher;
++import java.util.regex.Pattern;
+ import java.util.function.Consumer;
+ 
+ @Log4j2
+@@ -239,6 +241,36 @@ public final class DataFixer {
+ 		}
+ 	}
+ 
++	/**
++	 * Rail types added at runtime by MTR-ANTE, one per km/h: P-1 to P600, then P1000 to P10000 in steps of 500.
++	 *
++	 * They exist only inside a running game, so no list of them can be kept here; the speed is in the name.
++	 */
++	private static final Pattern SYNTHETIC_RAIL_TYPE = Pattern.compile("P(-?\\d+)");
++
++	/**
++	 * The speed a legacy rail should run at, in km/h.
++	 *
++	 * Resolving the type by name and taking its speed is not enough on its own. A name this class does not know
++	 * falls back to WOODEN, at 20 km/h -- silently, and unrecoverably, since the name was the only record of what
++	 * the rail was. That is what happens to every rail an addon contributed. Two things are tried before the
++	 * fallback is accepted: the speed the rail saved on itself, which MTR 3.4.0 and later write out precisely so
++	 * that it outlives the name, and the speed spelled out in the name of a synthetic type.
++	 */
++	public static int legacySpeedLimitKilometersPerHour(String savedRailTypeName, long savedSpeedLimitKilometersPerHour, RailType railType) {
++		if (savedSpeedLimitKilometersPerHour > 0) {
++			return (int) savedSpeedLimitKilometersPerHour;
++		}
++		final Matcher matcher = SYNTHETIC_RAIL_TYPE.matcher(savedRailTypeName);
++		if (matcher.matches()) {
++			final int speedLimit = Integer.parseInt(matcher.group(1));
++			if (speedLimit > 0) {
++				return speedLimit;
++			}
++		}
++		return railType.speedLimitKilometersPerHour;
++	}
++
+ 	public enum RailType {
+ 		WOODEN(20, false, true, true, Rail.Shape.QUADRATIC),
+ 		STONE(40, false, true, true, Rail.Shape.QUADRATIC),
+@@ -255,7 +287,14 @@ public final class DataFixer {
+ 		CABLE_CAR_STATION(2, false, true, true, Rail.Shape.QUADRATIC),
+ 		RUNWAY(300, false, true, false, Rail.Shape.QUADRATIC),
+ 		AIRPLANE_DUMMY(SidingPathFinder.AIRPLANE_SPEED, false, true, false, Rail.Shape.QUADRATIC),
+-		NONE(0, false, false, true, Rail.Shape.QUADRATIC);
++		NONE(0, false, false, true, Rail.Shape.QUADRATIC),
++		// Absorbed into the Wah On Ar build of MTR 3 from the High Speed Rails addon, which is unmaintained. A
++		// world saved by that build names these, and without them every such rail converts to WOODEN at 20 km/h.
++		NETHERITE(450, false, true, true, Rail.Shape.QUADRATIC),
++		PURPUR(500, false, true, true, Rail.Shape.QUADRATIC),
++		REINFORCED_DEEPSLATE(600, false, true, true, Rail.Shape.QUADRATIC),
++		BARRIER(700, false, true, true, Rail.Shape.QUADRATIC),
++		BEDROCK(800, false, true, true, Rail.Shape.QUADRATIC);
+ 
+ 		public final int speedLimitKilometersPerHour;
+ 		public final double speedLimitMetersPerMillisecond;
+diff --git a/src/main/java/org/mtr/legacy/data/LegacyRailLoader.java b/src/main/java/org/mtr/legacy/data/LegacyRailLoader.java
+index c025aa8..e3d4970 100644
+--- a/src/main/java/org/mtr/legacy/data/LegacyRailLoader.java
++++ b/src/main/java/org/mtr/legacy/data/LegacyRailLoader.java
+@@ -21,13 +21,20 @@ public final class LegacyRailLoader {
+ 		new FileLoader<>(legacyRailNodes, LegacyRailNode::new, savePath, "rails", threadedFileLoading);
+ 		new FileLoader<>(legacySignalBlocks, LegacySignalBlock::new, savePath, "signal-blocks", threadedFileLoading);
+ 
+-		final Object2ObjectOpenHashMap<UUID, DataFixer.RailType> railCache = new Object2ObjectOpenHashMap<>();
++		final Object2ObjectOpenHashMap<UUID, LegacyRailDirection> railCache = new Object2ObjectOpenHashMap<>();
+ 
+ 		legacyRailNodes.forEach(legacyRailNode -> {
+ 			final Position startPosition = legacyRailNode.getStartPosition();
+ 			final long startPositionLong = legacyRailNode.getStartPositionLong();
+ 			legacyRailNode.iterateConnections(railNodeConnection -> {
+ 				final DataFixer.RailType railType = railNodeConnection.getRailType();
++				// Not railType.speedLimitKilometersPerHour: an unrecognised type name resolves to WOODEN, and
++				// taking its speed would quietly turn every rail an addon contributed into 20 km/h track
++				final int speedLimit = DataFixer.legacySpeedLimitKilometersPerHour(
++						railNodeConnection.getRailTypeName(),
++						railNodeConnection.getSavedSpeedLimitKilometersPerHour(),
++						railType
++				);
+ 				final Position endPosition = railNodeConnection.getEndPosition();
+ 				final long endPositionLong = railNodeConnection.getEndPositionLong();
+ 				final Angle startAngle = railNodeConnection.getStartAngle();
+@@ -44,9 +51,10 @@ public final class LegacyRailLoader {
+ 				}
+ 				final double verticalRadius = railNodeConnection.getVerticalRadius();
+ 				final UUID uuid = getUuid(startPositionLong, endPositionLong);
+-				final DataFixer.RailType oldRailType = railCache.get(uuid);
++				final LegacyRailDirection otherDirection = railCache.get(uuid);
+ 
+-				if (oldRailType != null) {
++				if (otherDirection != null) {
++					final DataFixer.RailType oldRailType = otherDirection.railType();
+ 					final Rail rail = switch (railType) {
+ 						case PLATFORM -> Rail.newPlatformRail(
+ 							startPosition, startAngle,
+@@ -76,7 +84,7 @@ public final class LegacyRailLoader {
+ 								endPosition, endAngle,
+ 								shape, Math.max(verticalRadius, 0), 0,
+ 								0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+-								styles, railType.speedLimitKilometersPerHour, oldRailType.speedLimitKilometersPerHour,
++								styles, speedLimit, otherDirection.speedLimitKilometersPerHour(),
+ 								false, false, true, railType == DataFixer.RailType.RUNWAY, true, transportMode
+ 							);
+ 						}
+@@ -91,12 +99,16 @@ public final class LegacyRailLoader {
+ 					rail.applyModification(signalModification);
+ 					rails.add(rail);
+ 				} else {
+-					railCache.put(uuid, railType);
++					railCache.put(uuid, new LegacyRailDirection(railType, speedLimit));
+ 				}
+ 			});
+ 		});
+ 	}
+ 
++	/** One direction of a rail, as the file described it: what kind it is, and how fast it actually goes. */
++	private record LegacyRailDirection(DataFixer.RailType railType, int speedLimitKilometersPerHour) {
++	}
++
+ 	private static UUID getUuid(long value1, long value2) {
+ 		return value1 > value2 ? new UUID(value1, value2) : new UUID(value2, value1);
+ 	}
+diff --git a/src/main/java/org/mtr/legacy/data/RailNodeConnection.java b/src/main/java/org/mtr/legacy/data/RailNodeConnection.java
+index 789c4de..d8bf6f1 100644
+--- a/src/main/java/org/mtr/legacy/data/RailNodeConnection.java
++++ b/src/main/java/org/mtr/legacy/data/RailNodeConnection.java
+@@ -36,6 +36,21 @@ public final class RailNodeConnection extends RailNodeConnectionSchema {
+ 		return EnumHelper.valueOf(DataFixer.RailType.WOODEN, rail_type);
+ 	}
+ 
++	/**
++	 * The rail type exactly as it was written, before it is matched against the types this class knows.
++	 *
++	 * {@link #getRailType()} answers WOODEN for anything unrecognised, which is indistinguishable from a rail that
++	 * really was wooden. The name is needed to tell those apart.
++	 */
++	public String getRailTypeName() {
++		return rail_type;
++	}
++
++	/** The speed limit saved on the rail itself, in km/h, or zero when it deferred to its type. */
++	public int getSavedSpeedLimitKilometersPerHour() {
++		return (int) speed_limit;
++	}
++
+ 	public TransportMode getTransportMode() {
+ 		return transportMode;
+ 	}
+diff --git a/src/test/java/org/mtr/legacy/data/LegacyRailSpeedTests.java b/src/test/java/org/mtr/legacy/data/LegacyRailSpeedTests.java
+new file mode 100644
+index 0000000..a629afc
+--- /dev/null
++++ b/src/test/java/org/mtr/legacy/data/LegacyRailSpeedTests.java
+@@ -0,0 +1,61 @@
++package org.mtr.legacy.data;
++
++import org.junit.jupiter.api.Test;
++
++import static org.junit.jupiter.api.Assertions.assertEquals;
++
++/**
++ * Covers what speed a rail from an MTR 3 world converts to.
++ *
++ * The failure this guards against is silent: an unrecognised type name resolves to WOODEN at 20 km/h, and since
++ * the name was the only record of what the rail was, nothing afterwards can tell that it happened. So the cases
++ * that matter most here are the ones where the answer must NOT be 20.
++ */
++public final class LegacyRailSpeedTests {
++
++	@Test
++	public void savedSpeedWins() {
++		// MTR 3.4.0 and later write the rail's speed onto the rail. A builder may also have set it by hand, so
++		// it beats anything the type name says -- including for types that have a speed of their own.
++		assertEquals(450, speed("NETHERITE", 450, DataFixer.RailType.NETHERITE));
++		assertEquals(30, speed("NETHERITE", 30, DataFixer.RailType.NETHERITE));
++		assertEquals(140, speed("IRON", 140, DataFixer.RailType.IRON));
++		// ...and it is the only thing left when the name means nothing to any build
++		assertEquals(275, speed("SOME_TYPE_NOBODY_HAS", 275, DataFixer.RailType.WOODEN));
++	}
++
++	@Test
++	public void absorbedTypesKeepTheirSpeed() {
++		// The five from the retired High Speed Rails addon, in a world saved before 3.4.0 stamped them
++		assertEquals(450, speed("NETHERITE", 0, DataFixer.RailType.NETHERITE));
++		assertEquals(500, speed("PURPUR", 0, DataFixer.RailType.PURPUR));
++		assertEquals(600, speed("REINFORCED_DEEPSLATE", 0, DataFixer.RailType.REINFORCED_DEEPSLATE));
++		assertEquals(700, speed("BARRIER", 0, DataFixer.RailType.BARRIER));
++		assertEquals(800, speed("BEDROCK", 0, DataFixer.RailType.BEDROCK));
++	}
++
++	@Test
++	public void syntheticTypesSpellTheirSpeed() {
++		// MTR-ANTE builds these at runtime, one per km/h, so there is no list of them to match against
++		assertEquals(160, speed("P160", 0, DataFixer.RailType.WOODEN));
++		assertEquals(1, speed("P1", 0, DataFixer.RailType.WOODEN));
++		assertEquals(10000, speed("P10000", 0, DataFixer.RailType.WOODEN));
++	}
++
++	@Test
++	public void nothingElseIsGuessedAt() {
++		// P-1 is ANTE's name for a rail with no limit at all, not a rail at -1 km/h
++		assertEquals(20, speed("P-1", 0, DataFixer.RailType.WOODEN));
++		// A name that merely looks like one is not one
++		assertEquals(80, speed("PLATFORM", 0, DataFixer.RailType.PLATFORM));
++		assertEquals(300, speed("P", 0, DataFixer.RailType.DIAMOND));
++		assertEquals(60, speed("P12X", 0, DataFixer.RailType.EMERALD));
++		// An ordinary rail is left entirely alone
++		assertEquals(80, speed("IRON", 0, DataFixer.RailType.IRON));
++		assertEquals(0, speed("NONE", 0, DataFixer.RailType.NONE));
++	}
++
++	private static int speed(String savedRailTypeName, long savedSpeedLimit, DataFixer.RailType railType) {
++		return DataFixer.legacySpeedLimitKilometersPerHour(savedRailTypeName, savedSpeedLimit, railType);
++	}
++}
+diff --git a/src/test/java/org/mtr/legacy/data/package-info.java b/src/test/java/org/mtr/legacy/data/package-info.java
+new file mode 100644
+index 0000000..ab02a0d
+--- /dev/null
++++ b/src/test/java/org/mtr/legacy/data/package-info.java
+@@ -0,0 +1,7 @@
++/**
++ * Tests for the legacy world converter: the code that reads a world saved by MTR 3 and turns it into MTR 4 data.
++ */
++@NullMarked
++package org.mtr.legacy.data;
++
++import org.jspecify.annotations.NullMarked;
+-- 
+2.55.0.windows.5
+

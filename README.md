@@ -1,3 +1,17 @@
+> ### This is a fork
+>
+> The Wah On Ar server's build of MTR 4, kept on the `MTR-4-DEV` branch of
+> [iamshasha/WahOnAr_MTR](https://github.com/iamshasha/WahOnAr_MTR). The server runs **MTR 3** today; that line
+> lives on `main` in the same repository and is what is actually deployed.
+>
+> Forked from upstream's `4.0.6` branch, which is the newest one that still builds for **Minecraft 1.19.4** —
+> upstream drops 1.19.4 after this point, so keeping it alive is this fork's job from here on. Everything else
+> upstream does, we want; the fork exists for 1.19.4 support and for the world migration, not to diverge.
+>
+> Why the move is happening, what protects the MTR 3 server while it does, and how to get back if it goes wrong:
+> [MIGRATION.md](MIGRATION.md) · [遷移計劃](MIGRATION.zh-Hant.md). Changes on this branch:
+> [CHANGELOG-MTR4.md](CHANGELOG-MTR4.md).
+
 ## Minecraft Transit Railway 4.0.0
 
 _Minecraft Transit Railway_ is a [Minecraft mod](https://minecraft.wiki/w/Mods) that allows you to build your own transport network with automated trains, boats, cable cars, and planes!
