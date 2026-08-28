@@ -9,15 +9,29 @@ Nothing here ships. The plan this branch exists to carry out is in [MIGRATION.md
 
 ## Unreleased
 
-Branch opened. No MTR 4 work has landed yet.
+### Legacy rail speeds survive the conversion
 
-Planned, roughly in the order it has to happen:
+The first piece of the forward converter, kept as a patch against
+[Transport-Simulation-Core](https://github.com/Minecraft-Transit-Railway/Transport-Simulation-Core) rather than a
+fork, so that project's updates keep arriving. It lives in [mtr4/](mtr4/), and `mtr4/apply.sh` clones, patches
+and builds it in one command.
 
-- **The forward world converter, MTR 3 → MTR 4.** MTR 4's own `org.mtr.legacy` does most of the mapping already.
-  What it gets wrong for this server is its rail-type table — it resolves a saved rail by name against a hardcoded
-  list of the sixteen upstream types and falls back to WOODEN, 20 km/h, for anything else, which is every rail
-  absorbed from the High Speed Rails addon and every one of ANTE's ~640 synthetic `P###` types. It also never
-  reads the per-rail speed that MTR 3.4.0 now stamps onto every rail at risk.
+MTR 4's converter read a legacy rail's type by name and fell back to WOODEN, 20 km/h, for any name it did not
+know — silently, and with the original speed unrecoverable, since the name was the only record of it. That is
+every rail absorbed from the High Speed Rails addon and every one of ANTE's ~640 synthetic `P###` types: most of
+the high-speed network. It now tries three things in order — the speed the rail saved on itself, which MTR 3.4.0
+writes out precisely so it outlives the name and which a builder may also have set by hand; the five absorbed
+type names; and the speed spelled out in a `P###` name. One-way rails keep a different limit each way, as they
+do in MTR 3.
+
+A world with none of these converts exactly as it did before. Four tests cover it, including the cases that must
+*not* be guessed at, and they run as part of the build.
+
+Still planned, roughly in the order it has to happen:
+
+- **The rest of the forward world converter, MTR 3 → MTR 4.** The rail speeds above were the part that loses
+  data outright. What remains is running it against a copy of the live world and diffing the result, station by
+  station and timetable by timetable.
 - **The reverse converter, MTR 4 → MTR 3.** Written second, because the forward pass is what establishes the
   field mapping. Allowed to be lossy for MTR 4 fields with no MTR 3 counterpart; track geometry and timetables
   are not.

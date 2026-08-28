@@ -53,3 +53,4 @@ fabric/server
 forge/server
 
 .architectury-transformer/
+tools/*.class
