@@ -25,6 +25,16 @@ public class Rail extends SerializedDataBase {
 
 	public final RailType railType;
 	/**
+	 * Whether reading this rail wrote a speed onto it that the file did not have.
+	 *
+	 * The saver decides what to write by hashing the object it holds and comparing that with the hash it recorded
+	 * when it read the file. Stamping happens while reading, so by the time the hash is taken the object already
+	 * carries the stamp and the two agree — the saver concludes the file is current and never rewrites it. The
+	 * stamp would then live only in memory, for the lifetime of the server, and be lost on every restart. This
+	 * says otherwise, once, so the rail is written out and the number actually reaches the disk.
+	 */
+	public transient boolean stampedOnLoad;
+	/**
 	 * A speed limit in km/h set on this individual rail, or 0 to use whatever its {@link RailType} allows.
 	 * Not final: the rail brush edits it in place on an existing rail.
 	 */
@@ -269,6 +279,7 @@ public class Rail extends SerializedDataBase {
 		final int savedSpeedLimitMessagePack = messagePackHelper.getInt(KEY_SPEED_LIMIT);
 		railType = RailTypeMigration.readSaved(messagePackHelper.getString(KEY_RAIL_TYPE), savedSpeedLimitMessagePack);
 		speedLimitKmh = RailTypeMigration.saveSpeedLimit(railType, savedSpeedLimitMessagePack);
+		stampedOnLoad = speedLimitKmh != savedSpeedLimitMessagePack;
 		minCarsAccepted = messagePackHelper.getInt(KEY_MIN_CARS_ACCEPTED);
 		maxCarsAccepted = messagePackHelper.getInt(KEY_MAX_CARS_ACCEPTED);
 		transportMode = EnumHelper.valueOf(TransportMode.TRAIN, messagePackHelper.getString(KEY_TRANSPORT_MODE));
@@ -298,6 +309,7 @@ public class Rail extends SerializedDataBase {
 		final int savedSpeedLimitTag = compoundTag.getInt(KEY_SPEED_LIMIT);
 		railType = RailTypeMigration.readSaved(compoundTag.getString(KEY_RAIL_TYPE), savedSpeedLimitTag);
 		speedLimitKmh = RailTypeMigration.saveSpeedLimit(railType, savedSpeedLimitTag);
+		stampedOnLoad = speedLimitKmh != savedSpeedLimitTag;
 		minCarsAccepted = compoundTag.getInt(KEY_MIN_CARS_ACCEPTED);
 		maxCarsAccepted = compoundTag.getInt(KEY_MAX_CARS_ACCEPTED);
 		transportMode = EnumHelper.valueOf(TransportMode.TRAIN, compoundTag.getString(KEY_TRANSPORT_MODE));
@@ -328,6 +340,7 @@ public class Rail extends SerializedDataBase {
 		final int savedSpeedLimitPacket = packet.readInt();
 		railType = RailTypeMigration.readSaved(savedRailTypePacket, savedSpeedLimitPacket);
 		speedLimitKmh = RailTypeMigration.saveSpeedLimit(railType, savedSpeedLimitPacket);
+		stampedOnLoad = speedLimitKmh != savedSpeedLimitPacket;
 		minCarsAccepted = packet.readInt();
 		maxCarsAccepted = packet.readInt();
 

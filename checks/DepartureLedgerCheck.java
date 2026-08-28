@@ -21,6 +21,8 @@ import java.util.Set;
 public class DepartureLedgerCheck {
 
 	private static final int MINUTE = 60000;
+	/** Mirrors Depot.MILLIS_PER_TICK, which cannot be referenced here without dragging Minecraft in. */
+	private static final double MILLIS_PER_TICK = 50;
 	private static final int MIN_SLACK = 10000;
 
 	public static void main(String[] args) {
@@ -42,6 +44,8 @@ public class DepartureLedgerCheck {
 		assertUnclaimedSkipsWhatIsRunning(everyFiveMinutes);
 		assertUnclaimedSpreadsAcrossSidings(everyFiveMinutes);
 		assertUnclaimedGivesUpWhenAllClaimed(departuresAt(0, 5 * MINUTE, 10 * MINUTE));
+		assertTimetabledDwellHoldsAnEarlyVehicle();
+		assertLateVehicleStillGetsAWholeStop();
 
 		System.out.println("DepartureLedger ok");
 	}
@@ -202,6 +206,53 @@ public class DepartureLedgerCheck {
 		final long named = ledger.findUnclaimedDeparture(departures, now, 1);
 		if (named >= 0) {
 			throw new AssertionError("named " + clock(named) + " with every departure inside the horizon claimed");
+		}
+	}
+
+	/**
+	 * An early vehicle waits for its booked time, and the wait does not drift while it waits.
+	 *
+	 * The total is recomputed every tick, so it has to come out the same every tick: if it crept upwards the
+	 * vehicle would never leave, and if it fell the doors would be cut short.
+	 */
+	private static void assertTimetabledDwellHoldsAnEarlyVehicle() {
+		final int base = 100;
+		final long untilDeparture = 20000;
+		final int expected = (int) Math.ceil(untilDeparture / MILLIS_PER_TICK);
+
+		for (int elapsed = 0; elapsed <= expected; elapsed++) {
+			// Every tick spent waiting is a tick less to wait, which is what keeps the total still
+			final long remaining = untilDeparture - (long) (elapsed * MILLIS_PER_TICK);
+			final int total = DepartureLedger.timetabledDwellTicks(base, elapsed, remaining, MILLIS_PER_TICK);
+			if (total != expected) {
+				throw new AssertionError("after " + elapsed + " ticks the stop was " + total
+						+ ", expected it to stay " + expected);
+			}
+		}
+
+		// And at the booked moment the stop is over, rather than a tick either side of it
+		if (DepartureLedger.timetabledDwellTicks(base, expected, 0, MILLIS_PER_TICK) > expected) {
+			throw new AssertionError("the vehicle was still being held at its booked departure");
+		}
+	}
+
+	/**
+	 * A vehicle that is already late still gets a whole stop.
+	 *
+	 * Returning nothing here is what made the doors close behind a departing train: the stop ended in the same
+	 * tick they were told to shut, so the train pulled away while they were still moving and the sound played
+	 * after it had gone. The stop also has to be long enough for the doors to open, wait and close at all.
+	 */
+	private static void assertLateVehicleStillGetsAWholeStop() {
+		final int base = 100;
+		for (final long lateBy : new long[]{1, 1000, 30000, 600000}) {
+			for (final int elapsed : new int[]{0, 10, 99}) {
+				final int total = DepartureLedger.timetabledDwellTicks(base, elapsed, -lateBy, MILLIS_PER_TICK);
+				if (total < base) {
+					throw new AssertionError(lateBy + "ms late after " + elapsed + " ticks gave a stop of " + total
+							+ ", shorter than the platform's own " + base);
+				}
+			}
 		}
 	}
 
