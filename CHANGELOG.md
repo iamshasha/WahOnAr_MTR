@@ -6,6 +6,34 @@ build, so these numbers will not match anything on the MTR project's site.
 
 Also published, with the Traditional Chinese version, at the server's own site.
 
+## 3.3.14 — 28 August 2026
+
+### Fixes
+
+- **A countdown could run all the way down to a train that had not left yet.** Arrival times are worked out from
+  where a train is, and a train standing at a platform is not moving, so the projection winds the clock back by
+  however long it has stood there to make the two line up. That is right for an ordinary stop. It is not right at
+  a timetabled origin, where the stop is stretched to hold the train until its booked departure: winding back by
+  that whole wait projected every arrival down the line as if the train had already gone. Displays counted to
+  zero, and past it, at a train still sitting at the platform in front of them. Worst on the first departures
+  after a restart, where the wait is longest — which is exactly where it was reported. Only as much of the stop
+  as the timings were built from is given back now.
+
+- **A departure the timetable does not contain, about a minute after each one it does.** A train waiting in a
+  siding projects its arrivals from the moment it expects to be let go, and the run out to the first platform was
+  counted on top of that. But a strict timetable books the time the train leaves that platform, not the time it
+  leaves the siding — the siding lets go early precisely so the train gets there on time. Counting the approach
+  twice put every one of those arrivals an approach late, so each real departure was shadowed by a false one a
+  minute or so behind it. Clearing trains never removed it, because the train casting the shadow was real and
+  standing in its siding.
+
+- **A held train reported itself several times a second.** The report was meant once per hold, and treated the
+  train moving again as the end of it — but a train pinned against a block is not stationary. The following limit
+  lets it creep, the block check stops it again, and every creep counted as the hold ending. It now says itself at
+  most twice a minute however the train squirms against what is in front of it.
+
+`Minecraft_Transit_Railway_1.19.4_3.3.14.jar` · 62,794,422 B · `sha256 d3d402129e9d0fa0987e42e5cb6ddab154d9e4e82097713bc1a44bfd5f63b920`
+
 ## 3.3.13 — 27 August 2026
 
 ### Fixes

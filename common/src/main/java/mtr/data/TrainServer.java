@@ -231,10 +231,10 @@ public class TrainServer extends Train {
 	 */
 	private void reportHold(long blockingTrainId, String reason) {
 		final long now = System.currentTimeMillis();
-		// Both conditions, not either. Reporting once per blocker was meant to be enough, but a train pinned against
-		// a block is not stationary: the following limit lets it creep, the block check stops it, and it does that
-		// several times a second. Every creep counted as having started moving again, so the "say it once" reset
-		// fired every other tick and the same line went out twenty times a second until the disk filled.
+		// A blocked train is not a stationary one: the following limit lets it creep forward, the block check stops
+		// it again, and it does that several times a second. Anything that treats movement as the end of the hold
+		// therefore rearms on every creep, and the same line goes out until the disk fills. The interval alone
+		// decides, so a hold says itself at most twice a minute however the train squirms against it.
 		if (lastHoldReported == blockingTrainId && now - lastHoldReportedAt < HOLD_REPORT_INTERVAL_MILLIS) {
 			return;
 		}
@@ -729,6 +729,22 @@ public class TrainServer extends Train {
 		return TrigCache.asin(value);
 	}
 
+	/**
+	 * When along its own run this vehicle reaches the first platform of the route, in ticks from leaving the siding.
+	 *
+	 * Read out of the same timings the arrival projection walks, rather than measured separately, so the anchor and
+	 * the arrivals hung off it cannot drift apart. Negative if the run has no platform, which a siding sitting on an
+	 * unfinished route does have.
+	 */
+	private float originPathTicks() {
+		for (final Siding.TimeSegment timeSegment : timeSegments) {
+			if (timeSegment.savedRailBaseId != 0 && timeSegment.savedRailBaseId != sidingId) {
+				return timeSegment.endTime;
+			}
+		}
+		return -1;
+	}
+
 	public boolean simulateTrain(Level world, float ticksElapsed, Depot depot, DataCache dataCache, List<Map<UUID, Long>> trainPositions, Map<Player, Set<TrainServer>> trainsInPlayerRange, Map<Long, List<ScheduleEntry>> schedulesForPlatform, Map<Long, Map<BlockPos, TrainDelay>> trainDelays) {
 		this.trainPositions = trainPositions;
 		this.trainsInPlayerRange = trainsInPlayerRange;
@@ -741,10 +757,6 @@ public class TrainServer extends Train {
 		}
 		keepChunksAheadLoaded(world);
 		blockedThisTick = false;
-		if (speed > Train.ACCELERATION_DEFAULT) {
-			// Genuinely under way, rather than creeping against a block, so the next hold is a new event
-			lastHoldReported = -1;
-		}
 		final int oldStoppingIndex = nextStoppingIndex;
 		final int oldPassengerCount = ridingEntities.size();
 		final boolean oldIsCurrentlyManual = isCurrentlyManual;
@@ -760,7 +772,6 @@ public class TrainServer extends Train {
 		}
 
 		final int nextDepartureTicks = isOnRoute ? 0 : depot.getNextDepartureMillis();
-		final long currentMillis = System.currentTimeMillis() - (long) (elapsedDwellTicks * Depot.MILLIS_PER_TICK) + (long) Math.max(0, nextDepartureTicks);
 
 		double currentTime = -1;
 		int startingIndex = 0;
@@ -771,6 +782,25 @@ public class TrainServer extends Train {
 			}
 			startingIndex++;
 		}
+
+		// The clock is wound back by however long this vehicle has been standing, because the position it reads its
+		// own progress from stops moving during a stop while the clock does not. That holds only while the stop is
+		// the one the timings were built from: a timetabled origin stretches its stop to hold the vehicle until its
+		// booked departure, and winding back by the whole of that wait projects every arrival down the line as if
+		// it had already left. Displays then count all the way down, and past zero, to a vehicle still sitting at
+		// the platform in front of them -- worst on the first departures after a restart, where the wait is
+		// longest. Only as much of the stop as the timings actually recorded may be given back.
+		final float countedDwellTicks = Math.min(elapsedDwellTicks, super.getTotalDwellTicks());
+		// A vehicle waiting in a siding projects its arrivals forward from the moment it expects to be let go, and
+		// the run out to the origin is then counted on top of that. Under a strict timetable the booked time is the
+		// one the vehicle leaves the origin platform, not the one it leaves the siding, so counting the approach on
+		// top put every arrival a whole approach late and hung a departure on the boards that the timetable does
+		// not contain, a minute or so after each one that it does. Backing the approach out again anchors the wait
+		// so the vehicle reaches the origin on its booked time.
+		final double approachTicks = depot.strictTimetable && !isOnRoute && currentTime >= 0
+				? Math.max(0, originPathTicks() - currentTime) : 0;
+		final long currentMillis = System.currentTimeMillis() - (long) (countedDwellTicks * Depot.MILLIS_PER_TICK)
+				+ (long) Math.max(0, nextDepartureTicks) - (long) (approachTicks * Depot.MILLIS_PER_TICK);
 
 		if (currentTime >= 0) {
 			float offsetTime = 0;
