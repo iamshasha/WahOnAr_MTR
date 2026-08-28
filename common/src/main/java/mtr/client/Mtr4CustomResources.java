@@ -41,6 +41,8 @@ public final class Mtr4CustomResources {
 	 * the stage at all, still draws. That is exactly MTR 4's behaviour, with no change to the renderer.
 	 */
 	private static final String STAGE_TEXT_ONLY = "TEXT_ONLY";
+	/** Short enough not to reject real packs, long enough that an accidental overlap does not pass. */
+	private static final int MINIMUM_FAMILY_PREFIX = 3;
 
 	private Mtr4CustomResources() {
 	}
@@ -115,9 +117,64 @@ public final class Mtr4CustomResources {
 		}
 	}
 
+	/**
+	 * Where a vehicle sits in a train, taken from its couplings.
+	 *
+	 * A gangway is where one carriage joins the next, so an end without one is an end of the train. That makes
+	 * the shape of a consist readable from the pack itself: closed-open is a front cab, open-open is a trailer,
+	 * open-closed is a back cab, and closed-closed is a vehicle that is a whole train by itself. No part of this
+	 * reads the vehicle's name, which is free text and in the pack author's own language.
+	 */
+	public static final class Shape {
+
+		public final String trainId;
+		public final String rawId;
+		public final int length;
+		public final int width;
+		public final boolean open1;
+		public final boolean open2;
+
+		private Shape(String trainId, String rawId, int length, int width, boolean open1, boolean open2) {
+			this.trainId = trainId;
+			this.rawId = rawId;
+			this.length = length;
+			this.width = width;
+			this.open1 = open1;
+			this.open2 = open2;
+		}
+
+		boolean isFrontCab() { return !open1 && open2; }
+
+		boolean isBackCab() { return open1 && !open2; }
+
+		boolean isMiddle() { return open1 && open2; }
+	}
+
+	/** A whole train, made of vehicles the pack ships separately. */
+	public static final class Assembly {
+
+		public final String id;
+		public final String name;
+		public final String frontTrainId;
+		public final String middleTrainId;
+		public final String backTrainId;
+
+		private Assembly(String id, String name, String frontTrainId, String middleTrainId, String backTrainId) {
+			this.id = id;
+			this.name = name;
+			this.frontTrainId = frontTrainId;
+			this.middleTrainId = middleTrainId;
+			this.backTrainId = backTrainId;
+		}
+	}
+
 	public static final class Result {
 
 		public final List<Train> trains = new ArrayList<>();
+		/** One per set of vehicles that form a train together; empty when a pack ships whole trains already. */
+		public final List<Assembly> assemblies = new ArrayList<>();
+		/** Beside the trains rather than inside them: only needed while working out what joins to what. */
+		public final List<Shape> shapes = new ArrayList<>();
 		/** Signs, already in MTR 3's shape, so that the existing sign loader reads them unchanged. */
 		public final JsonObject customSigns = new JsonObject();
 		/** What could not be carried across, in the pack author's terms. A set, because most of it repeats. */
@@ -166,11 +223,97 @@ public final class Mtr4CustomResources {
 			}
 		}
 
+		assemble(result);
+
 		noteUnsupportedSection(config, "rails", "custom rail models", result);
 		noteUnsupportedSection(config, "objects", "eyecandy objects", result);
 		noteUnsupportedSection(config, "lifts", "lift skins", result);
 
 		return result;
+	}
+
+	/**
+	 * Works out which vehicles are carriages of the same train, and records one whole train for each set.
+	 *
+	 * An MTR 4 pack ships a vehicle per carriage type and lets a driver couple them in the depot. MTR 3 has no
+	 * such step: a train is one type from end to end. Left alone, that leaves a pack's front cab, trailer and
+	 * back cab sitting in the train list as three separate trains, none of which is the train the pack is of.
+	 *
+	 * Vehicles are grouped by the size they are, then by the name they share. Sharing a size is not enough on its
+	 * own -- two unrelated trains in one pack may well both be 20 by 2 -- so the group also has to agree on a
+	 * common start to its ids, which is how pack authors name carriages of one train in practice. When they do
+	 * not agree, no train is assembled and the log says so, because a front cab of one train coupled to the
+	 * trailer of another is worse than leaving the carriages as they were.
+	 */
+	private static void assemble(Result result) {
+		final Map<String, List<Shape>> bySize = new LinkedHashMap<>();
+		for (final Shape shape : result.shapes) {
+			bySize.computeIfAbsent(shape.length + "x" + shape.width, key -> new ArrayList<>()).add(shape);
+		}
+
+		for (final List<Shape> group : bySize.values()) {
+			Shape front = null;
+			Shape middle = null;
+			Shape back = null;
+			for (final Shape shape : group) {
+				if (front == null && shape.isFrontCab()) {
+					front = shape;
+				} else if (back == null && shape.isBackCab()) {
+					back = shape;
+				} else if (middle == null && shape.isMiddle()) {
+					middle = shape;
+				}
+			}
+
+			// A pack whose vehicles are already whole trains has nothing to assemble, and neither has one that
+			// ships only cabs or only trailers. Both are ordinary, so neither is worth a note.
+			if (front == null || back == null || middle == null) {
+				continue;
+			}
+
+			final String prefix = commonPrefix(group);
+			if (prefix.length() < MINIMUM_FAMILY_PREFIX) {
+				result.notes.add("vehicles of the same size do not share a common name, so it is not clear which "
+						+ "are carriages of one train; they are listed separately rather than coupled by guesswork");
+				continue;
+			}
+
+			result.assemblies.add(new Assembly(
+					ICustomResources.CUSTOM_TRAIN_ID_PREFIX + prefix,
+					trainName(result, front.trainId, prefix),
+					front.trainId, middle.trainId, back.trainId
+			));
+		}
+	}
+
+	/** The start every id in the group shares, cut back to a separator so a name is never left half-written. */
+	private static String commonPrefix(List<Shape> group) {
+		String prefix = group.get(0).rawId;
+		for (final Shape shape : group) {
+			int i = 0;
+			while (i < prefix.length() && i < shape.rawId.length() && prefix.charAt(i) == shape.rawId.charAt(i)) {
+				i++;
+			}
+			prefix = prefix.substring(0, i);
+		}
+		final int lastSeparator = Math.max(prefix.lastIndexOf('_'), prefix.lastIndexOf('-'));
+		return lastSeparator > 0 ? prefix.substring(0, lastSeparator) : prefix;
+	}
+
+	/**
+	 * Names the assembled train after its front cab, with whatever the pack put in brackets to tell the
+	 * carriages apart taken off -- "Seoul Metro 4000 Series (4th Batch, front cab)" is the front cab's name, not
+	 * the train's. If that leaves nothing, the shared id stands in.
+	 */
+	private static String trainName(Result result, String frontTrainId, String prefix) {
+		for (final Train train : result.trains) {
+			if (train.id.equals(frontTrainId)) {
+				final int bracket = train.name.lastIndexOf('(');
+				final String trimmed = (bracket > 0 ? train.name.substring(0, bracket) : train.name).trim();
+				return trimmed.isEmpty() ? prefix : trimmed;
+			}
+		}
+		return prefix;
 	}
 
 	/**
@@ -282,6 +425,9 @@ public final class Mtr4CustomResources {
 		final String bveSoundBaseId = string(vehicle, "bveSoundBaseResource");
 		final boolean hasGangway = bool(vehicle, "hasGangway1", false) || bool(vehicle, "hasGangway2", false);
 		final boolean hasBarrier = bool(vehicle, "hasBarrier1", false) || bool(vehicle, "hasBarrier2", false);
+
+		result.shapes.add(new Shape(id, rawId, length, width,
+				bool(vehicle, "hasGangway1", false), bool(vehicle, "hasGangway2", false)));
 
 		result.trains.add(new Train(
 				id,

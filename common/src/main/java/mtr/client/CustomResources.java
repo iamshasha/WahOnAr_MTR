@@ -163,6 +163,11 @@ public class CustomResources implements IResourcePackCreatorProperties, ICustomR
 	private static void loadMtr4Resources(ResourceManager manager, JsonObject jsonConfig, List<String> customTrains) {
 		final Mtr4CustomResources.Result result = Mtr4CustomResources.convert(jsonConfig, path -> readResourceOnce(manager, path));
 
+		// Kept so that a train assembled from several of these can reach the carriages it is made of.
+		final Map<String, ModelTrainBase> modelsByTrainId = new HashMap<>();
+		final Map<String, ResourceLocation> texturesByTrainId = new HashMap<>();
+		final Map<String, Integer> doorMaxByTrainId = new HashMap<>();
+
 		result.trains.forEach(train -> {
 			final List<DynamicTrainModel> models = new ArrayList<>();
 			final List<ResourceLocation> textures = new ArrayList<>();
@@ -188,11 +193,60 @@ public class CustomResources implements IResourcePackCreatorProperties, ICustomR
 
 			TrainClientRegistry.register(train.id, train.baseTrainType, train.name, train.description, train.wikipediaArticle, model, train.layers.get(0).textureId, train.color, train.gangwayConnectionId, train.trainBarrierId, train.riderOffset, train.riderOffset, train.bogiePosition, false, soundBaseId, soundConfig);
 			customTrains.add(train.id);
+
+			modelsByTrainId.put(train.id, model);
+			texturesByTrainId.put(train.id, new ResourceLocation(train.layers.get(0).textureId + ".png"));
+			doorMaxByTrainId.put(train.id, train.layers.get(0).properties.get(IResourcePackCreatorProperties.KEY_PROPERTIES_DOOR_MAX).getAsInt());
+		});
+
+		// The carriages stay in the list beside the assembled train. Removing them would be tidier, but a depot
+		// that already runs one names it by id, and a train type that stops existing is a train that stops
+		// appearing -- so they are added to, never replaced.
+		result.assemblies.forEach(assembly -> {
+			final ModelTrainBase front = modelsByTrainId.get(assembly.frontTrainId);
+			final ModelTrainBase middle = modelsByTrainId.get(assembly.middleTrainId);
+			final ModelTrainBase back = modelsByTrainId.get(assembly.backTrainId);
+			if (front == null || middle == null || back == null) {
+				// One of the carriages had no model this build could draw, and was skipped further up
+				return;
+			}
+
+			final Mtr4CustomResources.Train template = trainById(result, assembly.frontTrainId);
+			if (template == null) {
+				return;
+			}
+
+			final int doorMax = Math.max(doorMaxByTrainId.getOrDefault(assembly.frontTrainId, 0),
+					Math.max(doorMaxByTrainId.getOrDefault(assembly.middleTrainId, 0),
+							doorMaxByTrainId.getOrDefault(assembly.backTrainId, 0)));
+
+			final ModelTrainBase model = new AssembledTrainModel(
+					front, texturesByTrainId.get(assembly.frontTrainId),
+					middle, texturesByTrainId.get(assembly.middleTrainId),
+					back, texturesByTrainId.get(assembly.backTrainId),
+					doorMax, template.doorAnimationType
+			);
+
+			final String soundBaseId = template.useBveSound ? template.bveSoundBaseId : template.speedSoundBaseId;
+			final JonTrainSound.JonTrainSoundConfig soundConfig = template.useBveSound ? null : new JonTrainSound.JonTrainSoundConfig(template.doorSoundBaseId, template.speedSoundCount, template.doorCloseSoundTime, template.accelSoundAtCoast, template.constPlaybackSpeed);
+
+			TrainClientRegistry.register(assembly.id, template.baseTrainType, assembly.name, template.description, template.wikipediaArticle, model, template.layers.get(0).textureId, template.color, template.gangwayConnectionId, template.trainBarrierId, template.riderOffset, template.riderOffset, template.bogiePosition, false, soundBaseId, soundConfig);
+			customTrains.add(assembly.id);
+			System.out.println("MTR 4 pack: assembled " + assembly.name + " from its front cab, trailer and back cab");
 		});
 
 		loadCustomSigns(result.customSigns);
 
 		result.notes.forEach(note -> System.out.println("MTR 4 pack: " + note));
+	}
+
+	private static Mtr4CustomResources.Train trainById(Mtr4CustomResources.Result result, String id) {
+		for (final Mtr4CustomResources.Train train : result.trains) {
+			if (train.id.equals(id)) {
+				return train;
+			}
+		}
+		return null;
 	}
 
 	public static int colorStringToInt(String string) {

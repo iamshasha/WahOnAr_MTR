@@ -5,6 +5,30 @@ The Wah On Ar build of Minecraft Transit Railway. This is a modified fork, not t
 build, so these numbers will not match anything on the MTR project's site.
 
 Also published, with the Traditional Chinese version, at the server's own site.
+## 3.5.01 — 28 August 2026
+
+### Implemented  
+
+- **MTR 4 train packs are assembled into whole trains.**
+  3.5.0 could read an MTR 4 pack, but MTR 4 ships a vehicle per carriage type and leaves the coupling to the
+  driver, so a pack's front cab, trailer and back cab each arrived as a separate train and none of them was the
+  train the pack is of. They are now put together: the cabs go on the ends and trailers fill the middle, so a
+  six-car train is a cab, four trailers and a cab, the way the pack intended.
+
+  Which carriage is which comes from the pack's own couplings, not from its names. A gangway is where one
+  carriage joins the next, so an end without one is an end of the train — closed-then-open is a front cab,
+  open-then-closed is a back cab, open at both ends is a trailer, and closed at both ends is a vehicle that is a
+  whole train on its own and is never used as an end of a longer one.
+
+  Carriages are still listed individually as well, so a train already built from one keeps working and anyone who
+  wants a single carriage type can still pick it.
+
+- **Vehicles are only coupled when it is clear they belong together.**
+  Being the same size is not enough — two unrelated trains in one pack may both be 20 by 2 — so they must also
+  share the start of their names, which is how pack authors name the carriages of one train in practice. When
+  that is not clear the carriages are left alone and the log says so, because a front cab of one train coupled to
+  the trailer of another looks deliberate and is wrong.
+
 ## 3.5.0 — 28 August 2026
 
 ### Implemented  
