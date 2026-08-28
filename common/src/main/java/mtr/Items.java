@@ -46,6 +46,16 @@ public interface Items {
 	RegistryObject<Item> RAIL_CONNECTOR_200_ONE_WAY = new RegistryObject<>(() -> new ItemRailModifier(true, false, true, true, RailType.QUARTZ));
 	RegistryObject<Item> RAIL_CONNECTOR_300 = new RegistryObject<>(() -> new ItemRailModifier(true, false, true, false, RailType.DIAMOND));
 	RegistryObject<Item> RAIL_CONNECTOR_300_ONE_WAY = new RegistryObject<>(() -> new ItemRailModifier(true, false, true, true, RailType.DIAMOND));
+	RegistryObject<Item> RAIL_CONNECTOR_450 = new RegistryObject<>(() -> new ItemRailModifier(true, false, true, false, RailType.NETHERITE));
+	RegistryObject<Item> RAIL_CONNECTOR_450_ONE_WAY = new RegistryObject<>(() -> new ItemRailModifier(true, false, true, true, RailType.NETHERITE));
+	RegistryObject<Item> RAIL_CONNECTOR_500 = new RegistryObject<>(() -> new ItemRailModifier(true, false, true, false, RailType.PURPUR));
+	RegistryObject<Item> RAIL_CONNECTOR_500_ONE_WAY = new RegistryObject<>(() -> new ItemRailModifier(true, false, true, true, RailType.PURPUR));
+	RegistryObject<Item> RAIL_CONNECTOR_600 = new RegistryObject<>(() -> new ItemRailModifier(true, false, true, false, RailType.REINFORCED_DEEPSLATE));
+	RegistryObject<Item> RAIL_CONNECTOR_600_ONE_WAY = new RegistryObject<>(() -> new ItemRailModifier(true, false, true, true, RailType.REINFORCED_DEEPSLATE));
+	RegistryObject<Item> RAIL_CONNECTOR_700 = new RegistryObject<>(() -> new ItemRailModifier(true, false, true, false, RailType.BARRIER));
+	RegistryObject<Item> RAIL_CONNECTOR_700_ONE_WAY = new RegistryObject<>(() -> new ItemRailModifier(true, false, true, true, RailType.BARRIER));
+	RegistryObject<Item> RAIL_CONNECTOR_800 = new RegistryObject<>(() -> new ItemRailModifier(true, false, true, false, RailType.BEDROCK));
+	RegistryObject<Item> RAIL_CONNECTOR_800_ONE_WAY = new RegistryObject<>(() -> new ItemRailModifier(true, false, true, true, RailType.BEDROCK));
 	RegistryObject<Item> RAIL_CONNECTOR_PLATFORM = new RegistryObject<>(() -> new ItemRailModifier(true, true, true, false, RailType.PLATFORM));
 	RegistryObject<Item> RAIL_CONNECTOR_SIDING = new RegistryObject<>(() -> new ItemRailModifier(true, true, true, false, RailType.SIDING));
 	RegistryObject<Item> RAIL_CONNECTOR_TURN_BACK = new RegistryObject<>(() -> new ItemRailModifier(true, false, true, false, RailType.TURN_BACK));

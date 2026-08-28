@@ -90,7 +90,9 @@ public class Rail extends SerializedDataBase {
 		this.facingStart = facingStart;
 		this.facingEnd = facingEnd;
 		this.railType = railType;
-		speedLimitKmh = 0;
+		// Newly laid track is stamped the same way loaded track is, so a rail is self-describing from the moment
+		// it exists rather than only after it has been through a save
+		speedLimitKmh = RailTypeMigration.saveSpeedLimit(railType, 0);
 		minCarsAccepted = 0;
 		maxCarsAccepted = 0;
 		this.transportMode = transportMode;
@@ -264,8 +266,9 @@ public class Rail extends SerializedDataBase {
 		isStraight1 = messagePackHelper.getBoolean(KEY_IS_STRAIGHT_1);
 		reverseT2 = messagePackHelper.getBoolean(KEY_REVERSE_T_2);
 		isStraight2 = messagePackHelper.getBoolean(KEY_IS_STRAIGHT_2);
-		railType = EnumHelper.valueOf(RailType.IRON, messagePackHelper.getString(KEY_RAIL_TYPE));
-		speedLimitKmh = messagePackHelper.getInt(KEY_SPEED_LIMIT);
+		final int savedSpeedLimitMessagePack = messagePackHelper.getInt(KEY_SPEED_LIMIT);
+		railType = RailTypeMigration.readSaved(messagePackHelper.getString(KEY_RAIL_TYPE), savedSpeedLimitMessagePack);
+		speedLimitKmh = RailTypeMigration.saveSpeedLimit(railType, savedSpeedLimitMessagePack);
 		minCarsAccepted = messagePackHelper.getInt(KEY_MIN_CARS_ACCEPTED);
 		maxCarsAccepted = messagePackHelper.getInt(KEY_MAX_CARS_ACCEPTED);
 		transportMode = EnumHelper.valueOf(TransportMode.TRAIN, messagePackHelper.getString(KEY_TRANSPORT_MODE));
@@ -292,8 +295,9 @@ public class Rail extends SerializedDataBase {
 		isStraight1 = compoundTag.getBoolean(KEY_IS_STRAIGHT_1);
 		reverseT2 = compoundTag.getBoolean(KEY_REVERSE_T_2);
 		isStraight2 = compoundTag.getBoolean(KEY_IS_STRAIGHT_2);
-		railType = EnumHelper.valueOf(RailType.IRON, compoundTag.getString(KEY_RAIL_TYPE));
-		speedLimitKmh = compoundTag.getInt(KEY_SPEED_LIMIT);
+		final int savedSpeedLimitTag = compoundTag.getInt(KEY_SPEED_LIMIT);
+		railType = RailTypeMigration.readSaved(compoundTag.getString(KEY_RAIL_TYPE), savedSpeedLimitTag);
+		speedLimitKmh = RailTypeMigration.saveSpeedLimit(railType, savedSpeedLimitTag);
 		minCarsAccepted = compoundTag.getInt(KEY_MIN_CARS_ACCEPTED);
 		maxCarsAccepted = compoundTag.getInt(KEY_MAX_CARS_ACCEPTED);
 		transportMode = EnumHelper.valueOf(TransportMode.TRAIN, compoundTag.getString(KEY_TRANSPORT_MODE));
@@ -319,9 +323,11 @@ public class Rail extends SerializedDataBase {
 		isStraight1 = packet.readBoolean();
 		reverseT2 = packet.readBoolean();
 		isStraight2 = packet.readBoolean();
-		railType = EnumHelper.valueOf(RailType.IRON, packet.readUtf(PACKET_STRING_READ_LENGTH));
+		final String savedRailTypePacket = packet.readUtf(PACKET_STRING_READ_LENGTH);
 		transportMode = EnumHelper.valueOf(TransportMode.TRAIN, packet.readUtf(PACKET_STRING_READ_LENGTH));
-		speedLimitKmh = packet.readInt();
+		final int savedSpeedLimitPacket = packet.readInt();
+		railType = RailTypeMigration.readSaved(savedRailTypePacket, savedSpeedLimitPacket);
+		speedLimitKmh = RailTypeMigration.saveSpeedLimit(railType, savedSpeedLimitPacket);
 		minCarsAccepted = packet.readInt();
 		maxCarsAccepted = packet.readInt();
 

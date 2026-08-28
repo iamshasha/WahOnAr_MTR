@@ -771,7 +771,11 @@ public class TrainServer extends Train {
 			heldTicks = 0;
 		}
 
-		final int nextDepartureTicks = isOnRoute ? 0 : depot.getNextDepartureMillis();
+		// Under a strict timetable the departures already claimed have to be skipped, or a vehicle waiting in a
+		// siding advertises the one another vehicle is out on the line running towards, and every display along
+		// the route shows that arrival twice
+		final int nextDepartureTicks = isOnRoute ? 0
+				: depot.strictTimetable ? depot.getNextUnclaimedDepartureMillis() : depot.getNextDepartureMillis();
 
 		double currentTime = -1;
 		int startingIndex = 0;

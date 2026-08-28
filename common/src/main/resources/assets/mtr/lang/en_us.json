@@ -824,5 +824,15 @@
 	"options.mtr.use_frustum_culling": "Skip drawing what is off screen",
 	"options.mtr.use_frustum_culling.tooltip": "Nothing the mod draws goes through Minecraft's own culling, so without this every train and sign in range is drawn even when it is behind you. Turn it off if parts of a train vanish while you are riding it — that would mean the culling is wrong on your setup, and it is worth telling the server about.",
 	"options.mtr.show_arrival_clock_time": "Show when trains are due, not how long until they arrive",
-	"options.mtr.show_arrival_clock_time.tooltip": "Displays the time a train is due instead of counting down to it. A countdown has to revise itself whenever a train runs late, and a revised countdown reads as a fault even when it is telling the truth. A due time simply becomes a later due time."
+	"options.mtr.show_arrival_clock_time.tooltip": "Displays the time a train is due instead of counting down to it. A countdown has to revise itself whenever a train runs late, and a revised countdown reads as a fault even when it is telling the truth. A due time simply becomes a later due time.",
+	"item.mtr.rail_connector_450": "Netherite Rail Connector",
+	"item.mtr.rail_connector_450_one_way": "Netherite Rail Connector (One-way)",
+	"item.mtr.rail_connector_500": "Purpur Rail Connector",
+	"item.mtr.rail_connector_500_one_way": "Purpur Rail Connector (One-way)",
+	"item.mtr.rail_connector_600": "Reinforced Deepslate Rail Connector",
+	"item.mtr.rail_connector_600_one_way": "Reinforced Deepslate Rail Connector (One-way)",
+	"item.mtr.rail_connector_700": "Barrier Rail Connector",
+	"item.mtr.rail_connector_700_one_way": "Barrier Rail Connector (One-way)",
+	"item.mtr.rail_connector_800": "Bedrock Rail Connector",
+	"item.mtr.rail_connector_800_one_way": "Bedrock Rail Connector (One-way)"
 }

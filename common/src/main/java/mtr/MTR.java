@@ -108,6 +108,16 @@ public class MTR implements IPacket {
 			registerItem.accept("rail_connector_200_one_way", Items.RAIL_CONNECTOR_200_ONE_WAY);
 			registerItem.accept("rail_connector_300", Items.RAIL_CONNECTOR_300);
 			registerItem.accept("rail_connector_300_one_way", Items.RAIL_CONNECTOR_300_ONE_WAY);
+			registerItem.accept("rail_connector_450", Items.RAIL_CONNECTOR_450);
+			registerItem.accept("rail_connector_450_one_way", Items.RAIL_CONNECTOR_450_ONE_WAY);
+			registerItem.accept("rail_connector_500", Items.RAIL_CONNECTOR_500);
+			registerItem.accept("rail_connector_500_one_way", Items.RAIL_CONNECTOR_500_ONE_WAY);
+			registerItem.accept("rail_connector_600", Items.RAIL_CONNECTOR_600);
+			registerItem.accept("rail_connector_600_one_way", Items.RAIL_CONNECTOR_600_ONE_WAY);
+			registerItem.accept("rail_connector_700", Items.RAIL_CONNECTOR_700);
+			registerItem.accept("rail_connector_700_one_way", Items.RAIL_CONNECTOR_700_ONE_WAY);
+			registerItem.accept("rail_connector_800", Items.RAIL_CONNECTOR_800);
+			registerItem.accept("rail_connector_800_one_way", Items.RAIL_CONNECTOR_800_ONE_WAY);
 			registerItem.accept("rail_connector_platform", Items.RAIL_CONNECTOR_PLATFORM);
 			registerItem.accept("rail_connector_siding", Items.RAIL_CONNECTOR_SIDING);
 			registerItem.accept("rail_connector_turn_back", Items.RAIL_CONNECTOR_TURN_BACK);

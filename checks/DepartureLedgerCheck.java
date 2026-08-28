@@ -39,6 +39,9 @@ public class DepartureLedgerCheck {
 		assertSettleSpendsThePast(everyFiveMinutes);
 		assertConsumedSetIsPruned(everyFiveMinutes);
 		assertOldScalarRuleDoubleBooks(everyFiveMinutes, new int[]{10 * MINUTE, MINUTE});
+		assertUnclaimedSkipsWhatIsRunning(everyFiveMinutes);
+		assertUnclaimedSpreadsAcrossSidings(everyFiveMinutes);
+		assertUnclaimedGivesUpWhenAllClaimed(departuresAt(0, 5 * MINUTE, 10 * MINUTE));
 
 		System.out.println("DepartureLedger ok");
 	}
@@ -140,6 +143,65 @@ public class DepartureLedgerCheck {
 
 		if (!doubleBooked) {
 			throw new AssertionError("the old scalar rule did not double book, so this check is not reproducing the bug");
+		}
+	}
+
+	/**
+	 * A departure already being run must not be named again by a vehicle still waiting to go.
+	 *
+	 * This is what put the same arrival on a display twice: the waiting vehicle read the timetable alone, so it
+	 * named the departure another vehicle had already been released for and was out on the line running towards.
+	 */
+	private static void assertUnclaimedSkipsWhatIsRunning(List<Integer> departures) {
+		final DepartureLedger ledger = new DepartureLedger();
+		final long now = 9 * 3600000L;
+		final long running = DepartureLedger.findDeparture(departures, now, true);
+		ledger.consume(running, now, departures.size());
+
+		final long named = ledger.findUnclaimedDeparture(departures, now, 1);
+		if (named == running) {
+			throw new AssertionError("named " + clock(running) + ", which a vehicle is already running");
+		}
+		if (named != running + 5 * MINUTE) {
+			throw new AssertionError("expected the departure after the claimed one, got " + clock(named));
+		}
+		// The gate itself must still agree that one is spent, or the skip is reading something else
+		if (!ledger.isSpent(running)) {
+			throw new AssertionError("the claimed departure did not read as spent");
+		}
+	}
+
+	/** Several sidings asking in the same tick must land on different departures, not all on the first. */
+	private static void assertUnclaimedSpreadsAcrossSidings(List<Integer> departures) {
+		final DepartureLedger ledger = new DepartureLedger();
+		final long now = 14 * 3600000L;
+		final Set<Long> named = new HashSet<>();
+		for (int ordinal = 1; ordinal <= 4; ordinal++) {
+			final long departure = ledger.findUnclaimedDeparture(departures, now, ordinal);
+			if (departure < 0) {
+				throw new AssertionError("ran out of departures at ordinal " + ordinal);
+			}
+			if (!named.add(departure)) {
+				throw new AssertionError("ordinal " + ordinal + " repeated " + clock(departure));
+			}
+		}
+		if (named.size() != 4) {
+			throw new AssertionError("four sidings produced " + named.size() + " distinct departures");
+		}
+	}
+
+	/** With every departure claimed there is nothing to advertise, and saying so beats naming one anyway. */
+	private static void assertUnclaimedGivesUpWhenAllClaimed(List<Integer> departures) {
+		final DepartureLedger ledger = new DepartureLedger();
+		final long now = 0;
+		for (long day = 0; day <= 1; day++) {
+			for (final int departure : departures) {
+				ledger.consume(day * DepartureLedger.MILLISECONDS_PER_DAY + departure, now, departures.size() * 4);
+			}
+		}
+		final long named = ledger.findUnclaimedDeparture(departures, now, 1);
+		if (named >= 0) {
+			throw new AssertionError("named " + clock(named) + " with every departure inside the horizon claimed");
 		}
 	}
 

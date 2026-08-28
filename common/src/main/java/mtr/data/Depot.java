@@ -547,6 +547,25 @@ public class Depot extends AreaBase implements IReducedSaveData {
 		return millisUntilDeploy >= 0 ? millisUntilDeploy : -1;
 	}
 
+	/**
+	 * How long until the departure a waiting vehicle should be aiming at, skipping the ones already claimed.
+	 *
+	 * {@link #getNextDepartureMillis()} answers from the timetable alone, which is right when vehicles are let go
+	 * on a headway and nothing is booked ahead of time. Under a strict timetable a departure is claimed the moment
+	 * its vehicle is released, and that vehicle is then out on the line running towards it -- so a vehicle still
+	 * standing in a siding that answered from the timetable alone would name the same departure as the one already
+	 * running it, and put a second, identical arrival on every display along the route.
+	 *
+	 * Counts off {@link #departureOffset} unclaimed departures, so several sidings asking in the same tick spread
+	 * across different ones rather than all naming the first.
+	 */
+	public int getNextUnclaimedDepartureMillis() {
+		departureOffset++;
+		final long now = System.currentTimeMillis();
+		final long departure = ledger.findUnclaimedDeparture(tempDepartures, now, departureOffset);
+		return departure < 0 ? -1 : (int) (departure - now);
+	}
+
 	public int getMillisUntilDeploy(int offset) {
 		return getMillisUntilDeploy(offset, 0);
 	}

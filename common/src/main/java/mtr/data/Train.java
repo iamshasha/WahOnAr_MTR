@@ -407,10 +407,16 @@ public abstract class Train extends NameColorDataBase implements IPacket {
 	}
 
 	public final float getRailSpeed(int railIndex) {
-		final RailType thisRail = path.get(railIndex).rail.railType;
+		final Rail rail = path.get(railIndex).rail;
+		final RailType thisRail = rail.railType;
 		final float railSpeed;
 		if (thisRail.canAccelerate) {
-			railSpeed = thisRail.maxBlocksPerTick;
+			// A speed written on the rail itself is what the rail runs at, not merely a ceiling over its type. It
+			// used to be read only by the lookahead below, which takes the lowest limit it can see -- so a builder
+			// who typed a number lower than the type allowed got it, and a builder who typed a higher one got
+			// nothing at all, with no way to tell the two cases apart. A rail that says 450 now runs at 450
+			// whatever it is built from, which is what typing a number into it was always supposed to mean.
+			railSpeed = rail.speedLimitKmh > 0 ? rail.speedLimitKmh / 3.6F / 20 : thisRail.maxBlocksPerTick;
 		} else {
 			final RailType lastRail = railIndex > 0 ? path.get(railIndex - 1).rail.railType : thisRail;
 			railSpeed = Math.max(lastRail.canAccelerate ? lastRail.maxBlocksPerTick : RailType.getDefaultMaxBlocksPerTick(transportMode), speed);

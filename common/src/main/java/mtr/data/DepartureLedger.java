@@ -81,6 +81,30 @@ public class DepartureLedger {
 		}
 	}
 
+	/**
+	 * The nth departure after the reference time that no train has been sent for, or -1 if there is none.
+	 *
+	 * Ordinals start at one. A vehicle that answers "which departure am I for?" from the timetable alone names the
+	 * one another vehicle was already released for and is out on the line running towards, which puts a second,
+	 * identical arrival on every display along its route.
+	 */
+	public long findUnclaimedDeparture(List<Integer> departures, long referenceMillis, int ordinal) {
+		// A day is further ahead than any siding's lead can reach, so running past it means everything left is
+		// claimed and there is nothing to name
+		final long horizon = referenceMillis + MILLISECONDS_PER_DAY;
+		long candidate = referenceMillis;
+		for (int found = 0; found < ordinal; ) {
+			candidate = findDeparture(departures, candidate + 1, true);
+			if (candidate < 0 || candidate > horizon) {
+				return -1;
+			}
+			if (!isSpent(candidate)) {
+				found++;
+			}
+		}
+		return candidate;
+	}
+
 	/** Everything already in the past is spent, once, when the depot first has a train able to go. */
 	public void settle(long departure) {
 		floor = departure;

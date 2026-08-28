@@ -6,6 +6,47 @@ build, so these numbers will not match anything on the MTR project's site.
 
 Also published, with the Traditional Chinese version, at the server's own site.
 
+## 3.4.0 — 28 August 2026
+
+### Fixes
+
+- **The same arrival shown twice.** A vehicle waiting in a siding advertises the arrivals of the departure it
+  expects to run, and it picked that departure from the timetable alone — with no way of knowing one had already
+  been claimed by a vehicle that was let go earlier and is out on the line running towards it. Both named the same
+  departure. Until 3.3.14 that was hidden, because the waiting one also had its timing wrong by the length of its
+  own run, so the two landed a minute or so apart and read as two services; correcting that put them exactly on
+  top of each other. Departures already claimed are now skipped.
+
+### The High Speed Rails addon is no longer needed
+
+Its five rail types are part of the mod now — 450, 500, 600, 700 and 800 km/h — along with their connectors, in
+both directions, under the same names and the same speeds. Existing track keeps everything it had.
+
+That addon was removed from Modrinth and GitHub some time ago and has not been maintained since 2023. It was also
+shipping its own copy of the mod's rail type list, from that year, which quietly took precedence over the real one.
+Nothing had gone wrong yet only because the two happened to agree.
+
+**It is no longer offered by the launcher and should be removed.** There is no rush: this release works whether or
+not it is still installed, which was deliberate — an update that only worked after everyone had tidied up first
+would have broken every client at once.
+
+### Additions
+
+- **Any rail can be given any speed by typing a number at it.** The mod has always had a speed limit on each rail,
+  but only ever read it as a ceiling: typing a *lower* number worked and typing a *higher* one did nothing at all,
+  with no way to tell the two apart. A rail that says 450 now runs at 450, whatever it is built from. This is what
+  the speed limit box in MTR-ANTE's rail brush was always writing to; it works now.
+
+- **A rail remembers its speed, not only the name of its type.** Track records what kind of rail it is by name,
+  and a name that cannot be read falls back to iron — silently, at 80 km/h. Track laid with a type that some later
+  version no longer has would therefore not disappear, which would at least be noticeable; it would quietly become
+  slow, which is far harder to spot and impossible to undo afterwards, because the original name is the only place
+  the speed was ever written down. Every rail at risk of that now carries its own speed as well, and the type is
+  worked back out from it. This costs nothing today and is the difference between a recoverable railway and a lost
+  one later.
+
+`Minecraft_Transit_Railway_1.19.4_3.4.0.jar` · 62,814,450 B · `sha256 9666b80ffe1c56aeabe1d6db5cd340a10c910c7e00b49db38ccbe31195717afb`
+
 ## 3.3.14 — 28 August 2026
 
 ### Fixes

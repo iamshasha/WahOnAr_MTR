@@ -18,7 +18,16 @@ public enum RailType implements IGui {
 	CABLE_CAR_STATION(2, MaterialColor.SNOW, false, true, true, RailSlopeStyle.CURVE),
 	RUNWAY(300, MaterialColor.ICE, false, true, false, RailSlopeStyle.CURVE),
 	AIRPLANE_DUMMY(900, MaterialColor.COLOR_BLACK, false, true, false, RailSlopeStyle.CURVE),
-	NONE(20, MaterialColor.COLOR_BLACK, false, false, true, RailSlopeStyle.CURVE);
+	NONE(20, MaterialColor.COLOR_BLACK, false, false, true, RailSlopeStyle.CURVE),
+	// Absorbed from the High Speed Rails addon, which is no longer maintained or distributed. A rail records
+	// its type by name and falls back to IRON when the name is unknown, so any track already laid with these
+	// would have quietly dropped to 80 km/h the moment that addon was removed. The names and speed limits are
+	// read from its own compiled enum rather than retyped, so existing track keeps exactly what it had.
+	NETHERITE(450, MaterialColor.NETHER, false, true, true, RailSlopeStyle.CURVE),
+	PURPUR(500, MaterialColor.COLOR_MAGENTA, false, true, true, RailSlopeStyle.CURVE),
+	REINFORCED_DEEPSLATE(600, MaterialColor.TERRACOTTA_LIGHT_BLUE, false, true, true, RailSlopeStyle.CURVE),
+	BARRIER(700, MaterialColor.TERRACOTTA_RED, false, true, true, RailSlopeStyle.CURVE),
+	BEDROCK(800, MaterialColor.TERRACOTTA_CYAN, false, true, true, RailSlopeStyle.CURVE);
 
 	public final int speedLimit;
 	public final float maxBlocksPerTick;
