@@ -41,6 +41,9 @@ mkdir -p "$WORK/classes"
 echo "--- mixin shape"
 python checks/mixin_shape_check.py "$JAR" "$JAVA_BIN/javap.exe"
 
+echo "--- language files"
+python checks/lang_json_check.py "$JAR"
+
 echo "--- MTR-ANTE binding anchor"
 LAMBDA_COUNT=$("$JAVA_BIN/javap.exe" -p -classpath "$JAR" mtr.render.RenderTrains 2>/dev/null | grep -c 'lambda\$render\$8' || true)
 if [ "$LAMBDA_COUNT" != "1" ]; then
