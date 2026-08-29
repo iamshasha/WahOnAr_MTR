@@ -64,7 +64,7 @@ echo "RailType statics: 0"
 echo "--- compiling checks"
 "$JAVA_BIN/javac.exe" "$CP_ARGS" -d "$WORK/classes" checks/*.java
 
-for CHECK in DepartureLedgerCheck TrainDeadlockCheck TrainCatchUpCheck RailTypeMigrationCheck RailStampCheck Mtr4PackCheck Mtr4AssemblyCheck; do
+for CHECK in DepartureLedgerCheck TrainDeadlockCheck TrainCatchUpCheck RailTypeMigrationCheck RailStampCheck Mtr4PackCheck Mtr4AssemblyCheck DepartureClaimCheck; do
 	MSYS_NO_PATHCONV=1 "$JAVA_BIN/java.exe" "$CP_ARGS" "$CHECK"
 done
 

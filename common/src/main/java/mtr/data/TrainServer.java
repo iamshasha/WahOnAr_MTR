@@ -557,6 +557,7 @@ public class TrainServer extends Train {
 			return;
 		}
 
+		releaseLapsedClaim();
 		updateTimetableTarget();
 
 		if (!super.isRepeat()) {
@@ -585,7 +586,8 @@ public class TrainServer extends Train {
 		final long now = System.currentTimeMillis();
 		final long next = timetableDepartureMillis >= 0 ? timetableDepartureMillis : currentDepot.findDeparture(now, true);
 		if (next < 0) {
-			returningToDepot = false;
+			// Nothing left for it to run, so there is nothing for it to stay out for
+			returningToDepot = true;
 			return;
 		}
 		// The stop the train is meant to make anyway is not idle time. Counting it as idle meant a train arriving a
@@ -595,6 +597,20 @@ public class TrainServer extends Train {
 				- (long) (remainingTicks * Depot.MILLIS_PER_TICK)
 				- (long) (originDwellTicks() * Depot.MILLIS_PER_TICK);
 		returningToDepot = idle > currentDepot.getStablingThresholdMillis();
+
+		if (returningToDepot && timetableDepartureMillis >= 0) {
+			// Stabling, so the departure just claimed belongs to whichever train is still out or still in the
+			// siding. A claim held by a train on its way to the depot is a departure nobody runs.
+			currentDepot.releaseDeparture(timetableDepartureMillis);
+			timetableDepartureMillis = -1;
+		}
+	}
+
+	/** The earliest this train could be standing at the origin with its stop made, ready to leave again. */
+	private long readyAtMillis(float remainingTicks) {
+		return System.currentTimeMillis()
+				+ (long) (remainingTicks * Depot.MILLIS_PER_TICK)
+				+ (long) (originDwellTicks() * Depot.MILLIS_PER_TICK);
 	}
 
 	/** The stop the origin platform is scheduled for, which the train would be making whether or not it stabled. */
@@ -624,6 +640,28 @@ public class TrainServer extends Train {
 	 * the one it just ran. A train that finds itself at the origin with no target at all — a server restart, or a
 	 * timetable switched on while it was already running — adopts the next departure due.
 	 */
+	/**
+	 * Gives up a claimed departure that has gone by while this train was still out on the line.
+	 *
+	 * Claiming a departure is what stops the depot sending a second train for it. The price is that a claim
+	 * nobody honours is a departure nobody runs: a train held up somewhere on its lap would otherwise sit on a
+	 * departure it has already missed, and the siding, seeing it spoken for, would decline to send the train that
+	 * could have run it.
+	 *
+	 * The claim is only let go once the departure is far enough past that this train plainly did not run it. A
+	 * train standing at the origin working through its stop has not missed anything and keeps what it has.
+	 */
+	private void releaseLapsedClaim() {
+		if (!isOnRoute || timetableDepartureMillis < 0 || isAtTimetabledOrigin()) {
+			return;
+		}
+		if (System.currentTimeMillis() > timetableDepartureMillis + currentDepot.getDepartureLapseMillis()) {
+			currentDepot.releaseDeparture(timetableDepartureMillis);
+			// Picked up again at the origin, from whatever is free by then
+			timetableDepartureMillis = -1;
+		}
+	}
+
 	private void updateTimetableTarget() {
 		if (!isOnRoute) {
 			// Stabled: the dispatch gate owns the choice, and stamps it as the train leaves
@@ -638,12 +676,18 @@ public class TrainServer extends Train {
 			wasHoldingAtOrigin = true;
 		} else if (wasHoldingAtOrigin) {
 			wasHoldingAtOrigin = false;
+			final float remainingTicks = remainingRunTicks();
 			if (timetableDepartureMillis >= 0) {
-				timetableDepartureMillis = currentDepot.findDeparture(timetableDepartureMillis + 1, true);
+				// Only a departure this train could be standing at the origin for. Taking the next one on the list
+				// regardless is what let a train six minutes from its own twenty-minute lap claim the departure
+				// after this one: the wait it measured came out negative, negative is not greater than the
+				// stabling threshold, so it stayed out for a trip it could never make -- and the departure it was
+				// really due back for was left to a train that was never sent, because this one had taken it.
+				timetableDepartureMillis = currentDepot.claimReachableDeparture(timetableDepartureMillis, readyAtMillis(remainingTicks));
 			}
 			// Pulling away from the origin with the next departure now known, which is the earliest the question
 			// can be answered and the last moment it can be answered without having already lied about it.
-			decideStabling(remainingRunTicks());
+			decideStabling(remainingTicks);
 		}
 	}
 

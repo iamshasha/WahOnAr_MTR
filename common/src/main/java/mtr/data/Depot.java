@@ -600,6 +600,37 @@ public class Depot extends AreaBase implements IReducedSaveData {
 	 * timetable straight avoids that entirely.
 	 */
 	/** How long a strict-timetable train may wait at the origin before it is worth sending it back to the depot. */
+	/**
+	 * The next departure this train should be running, claimed for it, or -1 if there is none it can reach.
+	 *
+	 * Claimed here as well as at the dispatch gate, because a train already out on the line is as much a claim on
+	 * a departure as one being let out of the siding, and until this existed only the siding said so. That is how
+	 * one departure could be given to two trains: the running one took it as its next trip without telling
+	 * anybody, and the depot, seeing it unspoken for, sent a second train.
+	 */
+	public long claimReachableDeparture(long afterMillis, long readyAtMillis) {
+		final long departure = ledger.findReachableDeparture(tempDepartures, afterMillis, readyAtMillis);
+		if (departure >= 0) {
+			ledger.consume(departure, System.currentTimeMillis(), tempDepartures.size());
+		}
+		return departure;
+	}
+
+	/** Hands a claimed departure back, for a train that stabled instead or let it go by. */
+	public void releaseDeparture(long departure) {
+		ledger.release(departure);
+	}
+
+	/**
+	 * How long after a departure a train still out on the line keeps its claim on it.
+	 *
+	 * Past this it has plainly not run it, and holding on would mean a departure claimed by a train that is not
+	 * coming and refused to one that is.
+	 */
+	public long getDepartureLapseMillis() {
+		return MIN_DEPARTURE_SLACK_MILLIS;
+	}
+
 	public long getStablingThresholdMillis() {
 		return stablingThresholdMinutes * 60L * 1000;
 	}

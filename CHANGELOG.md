@@ -5,6 +5,34 @@ The Wah On Ar build of Minecraft Transit Railway. This is a modified fork, not t
 build, so these numbers will not match anything on the MTR project's site.
 
 Also published, with the Traditional Chinese version, at the server's own site.
+## 3.5.04 — 29 August 2026
+
+### Fixes
+
+- **A train took the next departure as its own even when it could not possibly be back for it.**
+  A train leaving the origin picks up its next trip there and then. It took whatever came next in the timetable
+  without asking whether it could be standing at the origin by then, and the wait it measured to that departure
+  then came out negative — which is not greater than the stabling threshold, so it read exactly like a train
+  arriving comfortably early and the train stayed out.
+
+  With two departures six minutes apart and a lap of twenty, the train that ran the first took the second as well.
+  It could never reach it, and because it had taken it the depot would not send the train that could, so that
+  service did not run at all. The train also never went back to the depot, because as far as it knew it had a trip
+  to make.
+
+  A train now takes the next departure it could actually be back for, leaving one it cannot reach to a train that
+  can. When there is nothing it can reach, it goes to the depot, which is what having nothing to run means.
+
+- **A departure a running train has taken is no longer offered to a second train.**
+  Two trains being sent for one departure was possible because only the siding said what it had claimed. A train
+  already out on the line is just as much a claim on a departure, and now says so.
+
+  Every claim can be given back, because a claim nobody honours is a departure nobody runs: a train that stables
+  instead hands its claim back immediately, and a train still out on the line when its departure has plainly gone
+  by gives it up so the siding can send someone else.
+
+`Minecraft_Transit_Railway_1.19.4_3.5.04.jar` · 62,847,166 B · `sha256 2a29cef2bfebe5636358a4ae8dd6d236da53a426a5c082c8af15790a523f3a36`
+
 ## 3.5.03 — 29 August 2026
 
 ### Fixes

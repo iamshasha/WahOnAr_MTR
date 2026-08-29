@@ -126,6 +126,48 @@ public class DepartureLedger {
 	}
 
 	/** Everything already in the past is spent, once, when the depot first has a train able to go. */
+	/**
+	 * The first unclaimed departure after the given one that a train could actually be back in time for.
+	 *
+	 * A train leaving the origin takes the next departure as its own next trip. Taking it without asking whether
+	 * it can be back by then is what let a train claim a departure six minutes away when its own lap takes twenty:
+	 * the wait it then measured was negative, which read as "no wait at all", so it stayed out for a trip it could
+	 * never make and the departure it was really due back for went unserved.
+	 *
+	 * A departure it cannot reach is left alone rather than skipped over quietly -- some other train, or the depot
+	 * itself, is in a position to run it.
+	 *
+	 * @param departures    the timetable, as milliseconds into the day
+	 * @param afterMillis   the departure just run; the answer is strictly later than this
+	 * @param readyAtMillis the earliest this train could be standing at the origin ready to leave
+	 * @return the departure, or -1 if nothing within a day is both free and reachable
+	 */
+	public long findReachableDeparture(List<Integer> departures, long afterMillis, long readyAtMillis) {
+		long candidate = afterMillis;
+		// Bounded by the timetable itself: going round it once is enough to know nothing in it fits
+		for (int examined = 0; examined <= departures.size(); examined++) {
+			candidate = findUnclaimedDeparture(departures, candidate, 1);
+			if (candidate < 0) {
+				return -1;
+			}
+			if (candidate >= readyAtMillis) {
+				return candidate;
+			}
+		}
+		return -1;
+	}
+
+	/**
+	 * Gives a claimed departure back, for a train that turned out not to be running it.
+	 *
+	 * Claiming is what stops two trains being sent for one departure. The cost of claiming is that a claim nobody
+	 * honours is a departure nobody runs, so every claim needs a way back: a train that stables instead, and a
+	 * train whose departure went by while it was still out on the line, both hand it back here.
+	 */
+	public void release(long departure) {
+		consumed.remove(departure);
+	}
+
 	public void settle(long departure) {
 		floor = departure;
 	}
