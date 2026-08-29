@@ -55,4 +55,5 @@ forge/server
 .architectury-transformer/
 
 # enviromental variable
-.envtools/__pycache__/
+.env
+tools/__pycache__/
