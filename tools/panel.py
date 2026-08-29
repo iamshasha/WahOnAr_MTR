@@ -111,7 +111,14 @@ def install(env, version):
         print("%s is already there" % wanted)
     else:
         print("pulling %s from the archive..." % wanted)
-        call(env, "POST", "/files/pull", {"root": "/mods", "url": "%s/%s" % (ARCHIVE, wanted)})
+        # Panels differ on what they call these: older builds want root, newer ones directory and filename.
+        # Sending both is accepted by both, and is cheaper than detecting the version.
+        call(env, "POST", "/files/pull", {
+            "root": "/mods",
+            "directory": "/mods",
+            "filename": wanted,
+            "url": "%s/%s" % (ARCHIVE, wanted),
+        })
 
         # The pull is accepted immediately and happens in its own time, so wait for the file rather than assume
         for _ in range(60):
