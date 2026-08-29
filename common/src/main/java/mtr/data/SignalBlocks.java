@@ -116,11 +116,22 @@ public class SignalBlocks {
 
 	/** Whether the given train is being held up by the given other train, as of its own last tick. */
 	public boolean isTrainBlockedBy(long trainId, long blockingTrainId) {
+		return blockedBy(trainId) == blockingTrainId;
+	}
+
+	/**
+	 * What is holding the given train up, or 0 if it is not held or has not reported recently enough to trust.
+	 *
+	 * Following this from train to train is what turns a standoff between two into a ring of any size: A waits on
+	 * B, B on C, C back on A. Nobody in such a ring is waiting on the train directly in front of them in the way
+	 * a pair is, so a rule that only looks one step ahead never sees it.
+	 */
+	public long blockedBy(long trainId) {
 		final TrainReport report = trainReports.get(trainId);
 		if (report == null || !report.blocked || System.currentTimeMillis() - report.blockedAt > TRAIN_REPORT_STALE_MILLIS) {
-			return false;
+			return 0;
 		}
-		return report.blockedBy == blockingTrainId;
+		return report.blockedBy;
 	}
 
 	private TrainReport current(long trainId) {

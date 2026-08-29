@@ -402,7 +402,7 @@ public class TrainServer extends Train {
 	 * than a case to paper over.
 	 */
 	private boolean yieldsToMe(long otherTrainId) {
-		return signalBlocks != null && TrainDeadlock.proceeds(id, otherTrainId, signalBlocks.isTrainBlockedBy(otherTrainId, id));
+		return signalBlocks != null && TrainDeadlock.proceeds(id, otherTrainId, signalBlocks::blockedBy);
 	}
 
 	/**
