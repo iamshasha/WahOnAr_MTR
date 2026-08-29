@@ -5,6 +5,35 @@ The Wah On Ar build of Minecraft Transit Railway. This is a modified fork, not t
 build, so these numbers will not match anything on the MTR project's site.
 
 Also published, with the Traditional Chinese version, at the server's own site.
+## 3.5.03 — 29 August 2026
+
+### Fixes
+
+- **The server could be brought to a standstill by its own diagnostics.**
+  A held train says so in the log, at most twice a minute, so that a train that will not move can be told apart
+  from a depot that will not dispatch. That limit had an exemption: a report went out immediately whenever the
+  train in front changed, on the reasoning that a different blocker is new information.
+
+  It is, but it cost more than it was worth. Before 3.5.02, deadlocked trains never moved, so the train in front
+  never changed and the limit held. Once 3.5.02 began breaking those deadlocks, trains shuffled and the train in
+  front changed from tick to tick — so the exemption applied on every tick and the limit stopped limiting.
+  Every held train printed twenty lines a second, each building a description and taking the lock on the output
+  stream from the server thread. On a railway with a hundred held trains that is thousands of writes a second,
+  and the server spent its time logging rather than running: 101 ms per tick, 2 TPS.
+
+  The limit now applies whatever is in the way. A hold says itself at most twice a minute per train, and names
+  whatever is in front of it at the moment it speaks.
+
+- **A standoff is only broken once it has actually stood.**
+  Ordinary traffic makes rings that last a moment and clear themselves — a train pauses at a junction, the one
+  behind waits, and a tick later everything is moving. Forcing a train through one of those achieves nothing.
+  Nothing is forced through now until the standoff has held for five seconds, which is far longer than traffic
+  and far shorter than a deadlock: the ones found on the railway stood for three hours.
+
+  This keeps the deadlock rule off the hot path entirely while trains are running normally.
+
+`Minecraft_Transit_Railway_1.19.4_3.5.03.jar` · 62,846,468 B · `sha256 33dac2d4fc2421b42f57b28479b3c9584eaefa7ff5cdc101eb2a7300b6ac4a21`
+
 ## 3.5.02 — 29 August 2026
 
 ### Fixes

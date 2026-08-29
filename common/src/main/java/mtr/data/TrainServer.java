@@ -64,6 +64,8 @@ public class TrainServer extends Train {
 	private long lastPreloadedChunk = Long.MIN_VALUE;
 	/** Set by {@link #isRailBlocked} while this tick's checks run, read once they are done. */
 	private boolean blockedThisTick;
+	/** When this train first found itself held, or 0 if it is running. Reset the moment it gets a clear tick. */
+	private long blockedSince;
 	/**
 	 * How long this vehicle has been standing still because something is in its way.
 	 *
@@ -217,9 +219,7 @@ public class TrainServer extends Train {
 		return canDeploy;
 	}
 
-	/** The vehicle a hold was last reported against, so a stuck train says so once rather than twenty times a second. */
-	private long lastHoldReported = -1;
-	/** When that report went out, because a train pinned against a block never satisfies "it started moving again". */
+	/** When this train last said it was held, because a train pinned against a block never starts moving again. */
 	private long lastHoldReportedAt = 0;
 	private static final long HOLD_REPORT_INTERVAL_MILLIS = 30000;
 
@@ -231,14 +231,20 @@ public class TrainServer extends Train {
 	 */
 	private void reportHold(long blockingTrainId, String reason) {
 		final long now = System.currentTimeMillis();
-		// A blocked train is not a stationary one: the following limit lets it creep forward, the block check stops
-		// it again, and it does that several times a second. Anything that treats movement as the end of the hold
-		// therefore rearms on every creep, and the same line goes out until the disk fills. The interval alone
-		// decides, so a hold says itself at most twice a minute however the train squirms against it.
-		if (lastHoldReported == blockingTrainId && now - lastHoldReportedAt < HOLD_REPORT_INTERVAL_MILLIS) {
+		// The interval alone decides, and it decides regardless of which train is in the way.
+		//
+		// This used to let a report through whenever the blocker changed, on the reasoning that a new blocker is
+		// new information. It is, but it is not worth what it costs: once deadlock rings began to break, trains
+		// shuffled and the train in front changed from tick to tick, so the exemption applied every tick and the
+		// throttle stopped throttling. Every blocked train then printed twenty lines a second, each one building a
+		// description and taking the lock on System.out from the server thread. A railway with a hundred held
+		// trains put the server on the floor -- 2 TPS -- for what is only a diagnostic.
+		//
+		// A hold now says itself at most twice a minute per train, whatever is in front of it, and names whatever
+		// is in front of it at the moment it speaks.
+		if (now - lastHoldReportedAt < HOLD_REPORT_INTERVAL_MILLIS) {
 			return;
 		}
-		lastHoldReported = blockingTrainId;
 		lastHoldReportedAt = now;
 		final String blocker = signalBlocks == null ? "" : " [" + signalBlocks.describeTrain(blockingTrainId) + "]";
 		System.out.println("Vehicle " + id + " on siding " + sidingId + " is held by vehicle " + blockingTrainId
@@ -265,6 +271,9 @@ public class TrainServer extends Train {
 						continue;
 					}
 					blockedThisTick = true;
+					if (blockedSince == 0) {
+						blockedSince = System.currentTimeMillis();
+					}
 					if (signalBlocks != null) {
 						signalBlocks.setTrainBlockedBy(id, occupyingTrainId);
 					}
@@ -401,8 +410,22 @@ public class TrainServer extends Train {
 	 * Only a circle of two is broken. Three trains blocking in a ring stay stuck, which is a layout to fix rather
 	 * than a case to paper over.
 	 */
+	/**
+	 * How long a standoff has to have stood before anyone is forced through it.
+	 *
+	 * Traffic produces rings that last a moment and clear themselves: a train pauses at a junction, the one behind
+	 * it waits, and a tick later everybody is moving. Forcing a train through one of those achieves nothing and
+	 * costs the work of looking. A deadlock, by contrast, does not clear -- the ones found on the railway stood for
+	 * three hours -- so waiting a few seconds before intervening loses nothing and keeps this off the hot path
+	 * for all the ordinary cases.
+	 */
+	private static final long DEADLOCK_SETTLE_MILLIS = 5000;
+
 	private boolean yieldsToMe(long otherTrainId) {
-		return signalBlocks != null && TrainDeadlock.proceeds(id, otherTrainId, signalBlocks::blockedBy);
+		if (signalBlocks == null || blockedSince == 0 || System.currentTimeMillis() - blockedSince < DEADLOCK_SETTLE_MILLIS) {
+			return false;
+		}
+		return TrainDeadlock.proceeds(id, otherTrainId, signalBlocks::blockedBy);
 	}
 
 	/**
@@ -748,6 +771,10 @@ public class TrainServer extends Train {
 			signalBlocks.clearTrainBlocked(id);
 		}
 		keepChunksAheadLoaded(world);
+		if (!blockedThisTick) {
+			// A clear tick ends the standoff, so the next one starts its own clock rather than inheriting this one
+			blockedSince = 0;
+		}
 		blockedThisTick = false;
 		final int oldStoppingIndex = nextStoppingIndex;
 		final int oldPassengerCount = ridingEntities.size();
