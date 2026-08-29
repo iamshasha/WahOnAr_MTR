@@ -555,12 +555,21 @@ public class ClientCache extends DataCache implements IGui {
 		private void remove() {
 			if (!resourceLocation.equals(DEFAULT_BLACK_RESOURCE) && !resourceLocation.equals(DEFAULT_WHITE_RESOURCE) && !resourceLocation.equals(DEFAULT_TRANSPARENT_RESOURCE)) {
 				final TextureManager textureManager = Minecraft.getInstance().getTextureManager();
-				textureManager.release(resourceLocation);
-				final AbstractTexture abstractTexture = textureManager.getTexture(resourceLocation);
+
+				// getTexture(id) is not a lookup: when nothing is registered under that name it builds a
+				// SimpleTexture and loads it from the resource packs. A dynamic texture is drawn at runtime and
+				// has no file behind it, so asking for one that is already gone throws FileNotFoundException --
+				// and release() above had just removed it, so it was always already gone. That was one thrown
+				// exception per dynamic texture per refresh, on the render thread; a single client log had 2453
+				// of them. The two-argument form returns the default instead, and loads nothing.
+				final AbstractTexture abstractTexture = textureManager.getTexture(resourceLocation, null);
 				if (abstractTexture != null) {
 					abstractTexture.releaseId();
 					abstractTexture.close();
 				}
+
+				// After the texture is closed, not before: releasing it first is what left nothing to find.
+				textureManager.release(resourceLocation);
 			}
 		}
 	}
