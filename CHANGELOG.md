@@ -5,6 +5,47 @@ The Wah On Ar build of Minecraft Transit Railway. This is a modified fork, not t
 build, so these numbers will not match anything on the MTR project's site.
 
 Also published, with the Traditional Chinese version, at the server's own site.
+## 3.5.05 — 29 August 2026
+
+### Fixes
+
+- **A train about to leave suddenly wanted another five minutes.**
+  Seconds before departure a display would show the train needing about five more minutes, and the entry cleared
+  the moment it actually pulled away, leaving the following services correct.
+
+  One test was answering two different questions. "Is this train waiting at the origin" is about standing still,
+  and decides how long the stop is stretched so the train leaves at its booked time. "Has this train left the
+  origin yet" is about position, and decides when it takes on its next trip. Both used the same test, which was
+  false as soon as the train moved at all — so the instant it edged forward, still on its own platform, it took
+  on the *next* departure, and if it stopped again, which a train leaving a platform very often does, it was
+  holding for a service two trips away and every display said so.
+
+  Leaving is now a question of position. A train inching against a signal outside the platform has not left.
+
+### Changes
+
+- **Hold reports have their own file.**
+  A held train records what is holding it up in `logs/mtr-holds.log` rather than the server log. They were on the
+  console, where each line costs a synchronised write on the server thread; that is what put the server on the
+  floor in 3.5.02 and is a poor place for something written this often.
+
+  Written by a thread of its own, so a train reporting a hold costs almost nothing — which means the reports can
+  be frequent enough to be worth reading. They now go out every two seconds per train rather than every thirty,
+  and a standoff forming and breaking is visible in a way it was not before.
+
+- **`config/mtr-server.json` is written when the server starts.** It was written the first time a setting was
+  read, which is when a vehicle carrying passengers first moves — so on a server where that had not happened, the
+  settings existed and the file did not, and the only way to learn what could be configured was to already know.
+
+### Added
+
+- **`mtr:mcd_beep`**, for use with `/playsound`.
+
+- **Traditional Chinese for 49 strings that had none**, in both zh_hk and zh_tw, including the path generation
+  status on the depot screen and most of the resource pack creator.
+
+`Minecraft_Transit_Railway_1.19.4_3.5.05.jar` · 62,905,531 B · `sha256 72b19b581e5dd89167832a17b621cecafb8c01f7819c6a676e6c0a255ff2ae51`
+
 ## 3.5.04 — 29 August 2026
 
 ### Fixes

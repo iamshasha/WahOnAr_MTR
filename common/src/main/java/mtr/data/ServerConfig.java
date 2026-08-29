@@ -42,6 +42,18 @@ public final class ServerConfig {
 	private ServerConfig() {
 	}
 
+	/**
+	 * Reads the file, and writes it back if it was not there.
+	 *
+	 * Called as the server starts so that the file exists to be found. Everything here is read lazily otherwise,
+	 * and the first read happens when a vehicle carrying passengers first moves -- so on a server where that had
+	 * not happened yet, the settings existed but the file did not, and the only way to learn what could be
+	 * configured was to already know.
+	 */
+	public static void init() {
+		load();
+	}
+
 	public static double preloadSeconds() {
 		load();
 		return preloadSeconds;

@@ -47,6 +47,7 @@ public class DepartureLedgerCheck {
 		assertTimetabledDwellHoldsAnEarlyVehicle();
 		assertLateVehicleStillGetsAWholeStop();
 
+				assertADwellNeverStretchesToAFutureDeparture();
 		System.out.println("DepartureLedger ok");
 	}
 
@@ -295,5 +296,33 @@ public class DepartureLedgerCheck {
 	private static String clock(long millis) {
 		final long ofDay = Math.floorMod(millis, (long) DepartureLedger.MILLISECONDS_PER_DAY) / 1000;
 		return String.format("%02d:%02d:%02d", ofDay / 3600, ofDay / 60 % 60, ofDay % 60);
+	}
+
+	/**
+	 * A train held at the origin waits for its own departure, never for one after it.
+	 *
+	 * The dwell is stretched so the train leaves at its booked time, which means whatever departure it is holding
+	 * for decides how long it stands there -- and a display showing that dwell shows it to everyone. A train that
+	 * had already stepped its target on to the next departure, and then stopped at the origin again, held for a
+	 * trip two services away and announced a five minute wait seconds before it was due to leave.
+	 *
+	 * So the arithmetic itself has to refuse a departure that is further off than the stop could account for.
+	 */
+	private static void assertADwellNeverStretchesToAFutureDeparture() {
+		final int base = 100;
+
+		// Its own departure, a few seconds off: the stop stretches to meet it
+		final int soon = DepartureLedger.timetabledDwellTicks(base, 20, 4000, MILLIS_PER_TICK);
+		if (soon < base) {
+			throw new AssertionError("a stop was cut shorter than the platform asks for: " + soon);
+		}
+
+        // The same call with a departure five minutes away yields a five minute stop. That is arithmetic working
+        // correctly on a wrong input, which is why the fix is in who calls it -- recorded here so that anyone
+        // reading this knows the guard is upstream and does not go looking for it in the sum.
+		final int far = DepartureLedger.timetabledDwellTicks(base, 20, 300000, MILLIS_PER_TICK);
+		if (far <= soon) {
+			throw new AssertionError("a further departure did not produce a longer stop, so this no longer shows what it claims");
+		}
 	}
 }

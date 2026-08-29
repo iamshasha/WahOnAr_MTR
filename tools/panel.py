@@ -147,6 +147,13 @@ def log(env, lines):
 
 
 def main(argv):
+    # Station names are routinely not ASCII, and Windows consoles default to a codepage that cannot encode them.
+    # Without this the tool dies partway through printing a log, which looks like a short log rather than a crash.
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except AttributeError:
+        pass
+
     if len(argv) < 2:
         print(__doc__)
         return 2

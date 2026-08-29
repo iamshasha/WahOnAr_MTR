@@ -19452,5 +19452,12 @@
 				"attenuation_distance": 32
 			}
 		]
+	},
+	"mcd_beep": {
+		"sounds": [
+			{
+				"name": "mtr:mcd_beep"
+			}
+		]
 	}
 }

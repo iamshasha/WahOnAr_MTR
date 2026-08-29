@@ -221,7 +221,14 @@ public class TrainServer extends Train {
 
 	/** When this train last said it was held, because a train pinned against a block never starts moving again. */
 	private long lastHoldReportedAt = 0;
-	private static final long HOLD_REPORT_INTERVAL_MILLIS = 30000;
+	/**
+	 * Often enough to see a standoff form and break, which one a minute was not.
+	 *
+	 * This was thirty seconds while the reports went to the console, where they cost the server thread a
+	 * synchronised write apiece. They go to their own file now, written by a thread of its own, so a report costs
+	 * a string added to a list and the rate can be what the diagnostic actually wants.
+	 */
+	private static final long HOLD_REPORT_INTERVAL_MILLIS = 2000;
 
 	/**
 	 * Says once, out loud, that this train is being held and by what.
@@ -247,7 +254,7 @@ public class TrainServer extends Train {
 		}
 		lastHoldReportedAt = now;
 		final String blocker = signalBlocks == null ? "" : " [" + signalBlocks.describeTrain(blockingTrainId) + "]";
-		System.out.println("Vehicle " + id + " on siding " + sidingId + " is held by vehicle " + blockingTrainId
+		HoldLog.write(now + " Vehicle " + id + " on siding " + sidingId + " is held by vehicle " + blockingTrainId
 				+ blocker + ": " + reason);
 	}
 
@@ -652,7 +659,7 @@ public class TrainServer extends Train {
 	 * train standing at the origin working through its stop has not missed anything and keeps what it has.
 	 */
 	private void releaseLapsedClaim() {
-		if (!isOnRoute || timetableDepartureMillis < 0 || isAtTimetabledOrigin()) {
+		if (!isOnRoute || timetableDepartureMillis < 0 || isAtOriginPlatform()) {
 			return;
 		}
 		if (System.currentTimeMillis() > timetableDepartureMillis + currentDepot.getDepartureLapseMillis()) {
@@ -669,7 +676,7 @@ public class TrainServer extends Train {
 			return;
 		}
 
-		if (isAtTimetabledOrigin()) {
+		if (isAtOriginPlatform()) {
 			if (timetableDepartureMillis < 0) {
 				timetableDepartureMillis = currentDepot.findDeparture(System.currentTimeMillis(), true);
 			}
@@ -697,11 +704,28 @@ public class TrainServer extends Train {
 	 * A repeating train jumps railProgress back to the start of the loop and never returns to the depot, so the
 	 * departure list that governs dispatch is never consulted a second time without this.
 	 */
+	/** Standing still at the origin platform, which is when the timetable holds a train rather than the schedule. */
 	private boolean isAtTimetabledOrigin() {
+		return speed <= 0 && isAtOriginPlatform();
+	}
+
+	/**
+	 * At the origin platform, whether or not it is moving.
+	 *
+	 * Distinct from {@link #isAtTimetabledOrigin()} because "has it left yet" and "is it waiting" are different
+	 * questions and only one of them is about speed. A train pulling out of the platform, or edging forward
+	 * against a signal a few blocks up, has not left: it is still there, on the departure it is running.
+	 *
+	 * Answering that with the stopped-at-origin test is what made a train about to leave suddenly need another
+	 * five minutes. The moment it moved, that test went false, the target stepped on to the next departure, and
+	 * if it then stopped again -- which a train leaving a platform very often does -- it was back at the origin
+	 * holding for a departure two trips away, and said so on every display.
+	 */
+	private boolean isAtOriginPlatform() {
 		if (currentDepot == null || !currentDepot.strictTimetable || transportMode.continuousMovement) {
 			return false;
 		}
-		if (!isOnRoute || speed > 0) {
+		if (!isOnRoute) {
 			return false;
 		}
 		final int origin = getOriginIndex();

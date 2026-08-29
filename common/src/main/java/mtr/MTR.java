@@ -1,5 +1,6 @@
 package mtr;
 
+import mtr.data.ServerConfig;
 import mtr.data.Depot;
 import mtr.data.RailwayData;
 import mtr.data.Route;
@@ -476,6 +477,8 @@ public class MTR implements IPacket {
 					JavaVersionNotice.currentVersion(), JavaVersionNotice.REQUIRED_FOR_MTR_4,
 					JavaVersionNotice.GUIDE_URL);
 		}
+
+		Registry.registerServerStartingEvent(minecraftServer -> ServerConfig.init());
 
 		Registry.registerPlayerJoinEvent(player -> {
 			PacketTrainDataGuiServer.versionCheckS2C(player);
