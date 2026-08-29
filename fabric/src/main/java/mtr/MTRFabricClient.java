@@ -12,7 +12,6 @@ import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
 import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents;
 import net.fabricmc.fabric.api.resource.ResourceManagerHelper;
 import net.fabricmc.fabric.api.resource.SimpleSynchronousResourceReloadListener;
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.PackType;
@@ -39,18 +38,18 @@ public class MTRFabricClient implements ClientModInitializer, ICustomResources {
 		ResourceManagerHelper.get(PackType.CLIENT_RESOURCES).registerReloadListener(new CustomResourcesWrapper());
 
 		if (JavaVersionNotice.upgradeNeeded()) {
+			if (JavaVersionNotice.REFUSES_TO_LOAD) {
+				// No screen at this point and nowhere to put one, so the crash report is the message
+				throw new IllegalStateException(JavaVersionNotice.refusalMessage());
+			}
+
 			// Waits for the title screen rather than showing it from here: at mod initialization there is no screen to
-			// return to, and the game is still assembling itself. Once shown, the check stops running.
-			ClientTickEvents.END_CLIENT_TICK.register(new ClientTickEvents.EndTick() {
-
-				private boolean shown;
-
-				@Override
-				public void onEndTick(Minecraft minecraft) {
-					if (!shown && minecraft.screen instanceof TitleScreen) {
-						shown = true;
-						minecraft.setScreen(new JavaUpgradeScreen(minecraft.screen));
-					}
+			// return to, and the game is still assembling itself. It is then put back whenever anything else takes the
+			// screen, because from 3.5.1 there is no way past it -- the check stays registered for the whole session
+			// rather than firing once.
+			ClientTickEvents.END_CLIENT_TICK.register(minecraft -> {
+				if (minecraft.screen instanceof TitleScreen) {
+					minecraft.setScreen(new JavaUpgradeScreen());
 				}
 			});
 		}

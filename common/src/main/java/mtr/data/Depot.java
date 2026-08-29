@@ -616,6 +616,17 @@ public class Depot extends AreaBase implements IReducedSaveData {
 		return departure;
 	}
 
+	/**
+	 * The same answer as {@link #claimReachableDeparture}, without taking the departure.
+	 *
+	 * A vehicle still in a siding has to be able to say what it will do after the lap it has not started yet, so
+	 * that the displays say the same thing before it leaves as after. It must not claim anything to find that out:
+	 * the claim belongs to the vehicle that is actually released, and is taken as it pulls away from the origin.
+	 */
+	public long peekReachableDeparture(long afterMillis, long readyAtMillis) {
+		return ledger.findReachableDeparture(tempDepartures, afterMillis, readyAtMillis);
+	}
+
 	/** Hands a claimed departure back, for a train that stabled instead or let it go by. */
 	public void releaseDeparture(long departure) {
 		ledger.release(departure);

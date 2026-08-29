@@ -29,6 +29,8 @@ public class DepartureClaimCheck {
 		assertSkipsADepartureAnotherTrainHolds();
 		assertGivesUpWhenNothingFits();
 		assertAReleasedDepartureComesBack();
+		assertASidingKnowsItWillStableBeforeItLeaves();
+		assertASidingKnowsItWillNotStableBeforeItLeaves();
 		System.out.println("DepartureClaim ok");
 	}
 
@@ -111,6 +113,48 @@ public class DepartureClaimCheck {
 		if (next != departure(1)) {
 			throw new AssertionError("a released departure was not offered to the next train");
 		}
+	}
+
+	/**
+	 * The same answer, one lap earlier: a train still in the siding can say it will stable.
+	 *
+	 * This is what puts the origin's name on the displays and marks the run as the one that goes back to the depot.
+	 * Answering it only after the train had left meant the same run was advertised one way before it pulled away
+	 * and another way after.
+	 */
+	private static void assertASidingKnowsItWillStableBeforeItLeaves() {
+		final DepartureLedger ledger = new DepartureLedger();
+		final long departsAt = departure(0);
+		final long backAt = departsAt + 20 * MINUTE;
+
+		final long next = ledger.findReachableDeparture(TWO_SIX_MINUTES_APART, departsAt, backAt);
+		if (!stables(next, backAt)) {
+			throw new AssertionError("a train that cannot be back for anything did not read as stabling: " + next);
+		}
+	}
+
+	/** The other way round: a lap short enough to make the next departure is a train that stays out. */
+	private static void assertASidingKnowsItWillNotStableBeforeItLeaves() {
+		final DepartureLedger ledger = new DepartureLedger();
+		final long departsAt = departure(0);
+		final long backAt = departsAt + 4 * MINUTE;
+
+		final long next = ledger.findReachableDeparture(TWO_SIX_MINUTES_APART, departsAt, backAt);
+		if (next != departure(1)) {
+			throw new AssertionError("a train back in four minutes did not find the departure six minutes away");
+		}
+		if (stables(next, backAt)) {
+			throw new AssertionError("a train with a departure two minutes after it gets back read as stabling");
+		}
+	}
+
+	/**
+	 * The rule the train uses: nothing to come back for, or a wait past the depot's threshold.
+	 *
+	 * Four minutes is the threshold the reported railway is set to.
+	 */
+	private static boolean stables(long next, long backAt) {
+		return next < 0 || next - backAt > 4L * MINUTE;
 	}
 
 	/** The given departure of the timetable, as an absolute moment on day zero. */

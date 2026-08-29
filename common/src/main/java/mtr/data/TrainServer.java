@@ -613,6 +613,45 @@ public class TrainServer extends Train {
 		}
 	}
 
+	/**
+	 * Whether the projected schedule runs the loop a second time.
+	 *
+	 * Not the same question as {@link #isRepeat()}, which is about what the train does. A train that will stable at
+	 * the end of its lap projects one lap, and the last thing on that lap is its arrival back at the origin -- which
+	 * is what puts the origin's own name on the boards and marks the run as the one that goes back to the depot.
+	 *
+	 * That marker used to appear only once the train was already out, because the flag behind it is deliberately
+	 * cleared while a train sits in a siding, where the ordinary dispatch gate owns the decision. So the same run
+	 * was advertised one way before it left and another way after, and an arrival appeared or vanished at the
+	 * moment it pulled away. Asking the question here, of a train that has not moved yet, costs nothing and changes
+	 * nothing about what the train does: no departure is claimed, no route is altered, and the answer is replaced by
+	 * the real decision as the train leaves the origin.
+	 */
+	private boolean projectsRepeat(int nextDepartureTicks) {
+		return isRepeat() && !willStableAfterNextLap(nextDepartureTicks);
+	}
+
+	/**
+	 * Whether a train still standing in a siding is already booked to stable at the end of the lap it has not begun.
+	 *
+	 * Answered the same way {@link #decideStabling} answers it, one lap earlier: take the departure it is waiting
+	 * for, add the lap and the stop it makes at the origin, and see whether there is a departure it could still be
+	 * back for. Nothing here is claimed -- the claim belongs to whichever train is actually released.
+	 */
+	private boolean willStableAfterNextLap(int nextDepartureTicks) {
+		if (isOnRoute || currentDepot == null || !currentDepot.strictTimetable
+				|| transportMode.continuousMovement || nextDepartureTicks < 0 || timeSegments.isEmpty()) {
+			return false;
+		}
+		final long departsAt = System.currentTimeMillis() + Math.max(0, nextDepartureTicks);
+		final long backAt = departsAt
+				+ (long) (timeSegments.get(timeSegments.size() - 1).endTime * Depot.MILLIS_PER_TICK)
+				+ (long) (originDwellTicks() * Depot.MILLIS_PER_TICK);
+		final long next = currentDepot.peekReachableDeparture(departsAt, backAt);
+		// Nothing left it could be back for is the clearest case of all
+		return next < 0 || next - backAt > currentDepot.getStablingThresholdMillis();
+	}
+
 	/** The earliest this train could be standing at the origin with its stop made, ready to leave again. */
 	private long readyAtMillis(float remainingTicks) {
 		return System.currentTimeMillis()
@@ -899,7 +938,7 @@ public class TrainServer extends Train {
 			boolean secondRound = false;
 			Runnable addSchedule = null;
 			routeId = 0;
-			for (int i = startingIndex; i < timeSegments.size() + (isRepeat() ? timeSegments.size() : 0); i++) {
+			for (int i = startingIndex; i < timeSegments.size() + (projectsRepeat(nextDepartureTicks) ? timeSegments.size() : 0); i++) {
 				final Siding.TimeSegment timeSegment = timeSegments.get(i % timeSegments.size());
 
 				if (timeSegment.savedRailBaseId != 0) {
@@ -927,7 +966,7 @@ public class TrainServer extends Train {
 						// see a hold, so without this the display counts down to a train that is not coming.
 						final long arrivalMillis = currentMillis + (long) ((timeSegment.endTime + offsetTime - currentTime + heldTicks) * Depot.MILLIS_PER_TICK);
 						addSchedule = () -> schedulesForPlatform.get(platformId).add(new ScheduleEntry(arrivalMillis, trainCars, timeSegment.routeId, timeSegment.currentStationIndex));
-						if (!isRepeat()) {
+						if (!projectsRepeat(nextDepartureTicks)) {
 							addSchedule.run();
 							addSchedule = null;
 						}
