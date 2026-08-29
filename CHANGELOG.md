@@ -5,6 +5,36 @@ The Wah On Ar build of Minecraft Transit Railway. This is a modified fork, not t
 build, so these numbers will not match anything on the MTR project's site.
 
 Also published, with the Traditional Chinese version, at the server's own site.
+## 3.5.02 — 29 August 2026
+
+### Fixes
+
+- **Trains could stand still for hours, blocking each other in a ring.**
+  When two trains each want track the other is standing on, one of them is let through. That rule only ever
+  described two trains: a train proceeded when the train in front of it named *this* train as what was holding it
+  up. In a ring of three or more — A waiting on B, B on C, C back on A — no train is waiting on the one behind it,
+  so no pair ever matched, nobody was released, and the ring stood until the server was restarted.
+
+  A server log from the railway had seven such rings in one session, of 2, 2, 2, 2, 5, 7 and 13 trains, with
+  individual trains held from 11:33 to 14:33 and 4100 hold reports in total.
+
+  The rule now follows the chain of what-is-waiting-on-what. If it leads back to where it started, everything on
+  the way round is one ring and the lowest id in it goes; every train walks the same chain and finds the same id,
+  so exactly one of them moves. A chain that ends is a queue rather than a ring — the train at the front is free
+  and the rest will follow — so nothing is forced through and no train is driven into the back of the one ahead.
+
+  Timetable trouble on a line where this was happening is downstream of it: a siding whose train never comes back
+  keeps being asked to send another.
+
+- **Every dynamic texture thrown away threw an exception.**
+  Route maps, direction arrows and platform screen door displays are drawn at runtime rather than loaded from a
+  file. Clearing one released it and then asked for it back to free its graphics memory — but asking for a texture
+  that is not registered does not return nothing, it tries to load it from the resource packs, and there is no
+  file to load. It had just been released, so this missed every single time. One client log had 2453 of them,
+  thrown on the render thread while drawing.
+
+`Minecraft_Transit_Railway_1.19.4_3.5.02.jar` · 62,846,405 B · `sha256 1834583af7de148191517fe799537ece7f4458439aa1531a490fc47a6fd10034`
+
 ## 3.5.01 — 28 August 2026
 
 ### Implemented  
