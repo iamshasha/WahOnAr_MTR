@@ -7,6 +7,7 @@ import mtr.render.RenderDrivingOverlay;
 import mtr.render.RenderTrains;
 import mtr.screen.JavaUpgradeScreen;
 import net.fabricmc.api.ClientModInitializer;
+import net.minecraft.client.Minecraft;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
 import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents;
@@ -47,9 +48,21 @@ public class MTRFabricClient implements ClientModInitializer, ICustomResources {
 			// return to, and the game is still assembling itself. It is then put back whenever anything else takes the
 			// screen, because from 3.5.1 there is no way past it -- the check stays registered for the whole session
 			// rather than firing once.
-			ClientTickEvents.END_CLIENT_TICK.register(minecraft -> {
-				if (minecraft.screen instanceof TitleScreen) {
-					minecraft.setScreen(new JavaUpgradeScreen());
+			ClientTickEvents.END_CLIENT_TICK.register(new ClientTickEvents.EndTick() {
+
+				private boolean announced;
+
+				@Override
+				public void onEndTick(Minecraft minecraft) {
+					if (minecraft.screen instanceof TitleScreen) {
+						if (!announced) {
+							announced = true;
+							// Said once, so a support report can be checked against a log rather than against a
+							// memory of whether a screen appeared
+							System.out.println("MTR: " + JavaVersionNotice.refusalMessage());
+						}
+						minecraft.setScreen(new JavaUpgradeScreen());
+					}
 				}
 			});
 		}
