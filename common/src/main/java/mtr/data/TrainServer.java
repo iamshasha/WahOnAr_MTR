@@ -47,6 +47,9 @@ public class TrainServer extends Train {
 	private boolean predictedStabling;
 	/** When {@link #predictedStabling} was last worked out, so that it is not worked out again on the next tick. */
 	private long predictedStablingAt;
+	/** The last answer written down, so that only a change is written again. */
+	private boolean reportedProjection;
+	private boolean reportedProjectionSet;
 	private SignalBlocks signalBlocks;
 	private List<Map<UUID, Long>> trainPositions;
 	private Map<Player, Set<TrainServer>> trainsInPlayerRange = new HashMap<>();
@@ -637,6 +640,13 @@ public class TrainServer extends Train {
 	 * the real decision as the train leaves the origin.
 	 */
 	private boolean projectsRepeat(int nextDepartureTicks) {
+		final boolean repeating = decideProjection(nextDepartureTicks);
+		reportProjection(repeating);
+		return repeating;
+	}
+
+	/** The answer itself, kept apart only so that {@link #reportProjection} sees every path out of it. */
+	private boolean decideProjection(int nextDepartureTicks) {
 		if (!isRepeat()) {
 			// The real decision has been taken and it is to stable
 			return false;
@@ -651,7 +661,13 @@ public class TrainServer extends Train {
 			// about a lap that has not started, measured in minutes, so a second-old answer is the same answer --
 			// and a vehicle standing in a siding is the case where it is asked most and changes least.
 			final long now = System.currentTimeMillis();
-			if (now - predictedStablingAt >= PREDICTION_INTERVAL_MILLIS) {
+			if (predictedStablingAt == 0) {
+				// Each vehicle gets its own place in the second before it ever answers. Every vehicle in a depot
+				// reads the same clock and starts from the same zero, so a shared deadline has all of them answer
+				// on the same tick and then keep step for ever after -- which spends the whole saving on one tick
+				// a second instead of spreading it, and a depot of parked vehicles is a spike rather than a load.
+				predictedStablingAt = now - Math.floorMod(id, PREDICTION_INTERVAL_MILLIS);
+			} else if (now - predictedStablingAt >= PREDICTION_INTERVAL_MILLIS) {
 				predictedStablingAt = now;
 				predictedStabling = willStableAfterNextLap(nextDepartureTicks);
 			}
@@ -662,6 +678,33 @@ public class TrainServer extends Train {
 		// it fresh each tick and the marker appears in the siding and vanishes the moment the vehicle moves, which
 		// is the same fault as before with the moment shifted.
 		return !predictedStabling;
+	}
+
+	/**
+	 * Writes down the moment the projection changes its mind, and nothing else.
+	 *
+	 * Three releases have now tried to make the boards say one thing from the siding to the origin, and the report
+	 * back each time has been that they still change at some point on the way. Reading the code has not settled
+	 * where, so this records it: only on a change, so a vehicle that is behaving says nothing at all, and into
+	 * {@link HoldLog} so that saying it costs the server thread nothing.
+	 *
+	 * Every input to the decision is on the line, because the useful question is not which answer came out but
+	 * which of them moved to produce it.
+	 */
+	private void reportProjection(boolean repeating) {
+		if (reportedProjectionSet && reportedProjection == repeating) {
+			return;
+		}
+		reportedProjectionSet = true;
+		reportedProjection = repeating;
+		HoldLog.write(System.currentTimeMillis() + " Vehicle " + id + " on siding " + sidingId
+				+ " now projects " + (repeating ? "two laps (terminus)" : "one lap (origin)")
+				+ ": onRoute=" + isOnRoute
+				+ " stablingDecided=" + stablingDecided
+				+ " returningToDepot=" + returningToDepot
+				+ " predictedStabling=" + predictedStabling
+				+ " superRepeat=" + super.isRepeat()
+				+ " railProgress=" + Math.round(railProgress));
 	}
 
 	/** How often the siding's answer is worked out again. Far shorter than anything it can change in. */
