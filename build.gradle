@@ -1,6 +1,10 @@
 plugins {
 	id "java"
-	id "com.github.johnrengelman.shadow" version "+" apply false
+	// The maintained fork. johnrengelman's last release is 8.1.1, and its ASM cannot read Java 21 class files --
+	// shadowJar failed with "Unsupported class file major version 65" the moment this fork was built at 21, which
+	// it has to be, because MTR 4's simulation engine is compiled for 21. Held at 8.3.x rather than 9.x: 9 wants
+	// Gradle 9, and this build is on Gradle 8.14 with a Loom that has not been tried against 9.
+	id "com.gradleup.shadow" version "8.3.6" apply false
 }
 
 group "org.mtr.mod"
@@ -8,7 +12,7 @@ version rootProject.properties.version
 
 subprojects {
 	apply plugin: "java"
-	apply plugin: "com.github.johnrengelman.shadow"
+	apply plugin: "com.gradleup.shadow"
 
 	configurations {
 		shadowImplementation
