@@ -727,8 +727,16 @@ public class TrainServer extends Train {
 			return false;
 		}
 		final long departsAt = System.currentTimeMillis() + Math.max(0, nextDepartureTicks);
+		// The lap measured from the origin, not from the siding. Under a strict timetable the booked departure is
+		// the moment the vehicle leaves the origin platform, so the run out to it is already behind departsAt --
+		// counting the whole path on top of that put the vehicle back later than it really gets back, which read as
+		// "cannot reach the next departure" and so as "stables". The real decision, taken at the origin from the
+		// run still ahead, then said the opposite, and the boards changed their mind at exactly that moment.
+		final float wholePath = timeSegments.get(timeSegments.size() - 1).endTime;
+		final float approach = originPathTicks();
+		final float lapFromOrigin = approach >= 0 ? Math.max(0, wholePath - approach) : wholePath;
 		final long backAt = departsAt
-				+ (long) (timeSegments.get(timeSegments.size() - 1).endTime * Depot.MILLIS_PER_TICK)
+				+ (long) (lapFromOrigin * Depot.MILLIS_PER_TICK)
 				+ (long) (originDwellTicks() * Depot.MILLIS_PER_TICK);
 		final long next = currentDepot.peekReachableDeparture(departsAt, backAt);
 		// Nothing left it could be back for is the clearest case of all
