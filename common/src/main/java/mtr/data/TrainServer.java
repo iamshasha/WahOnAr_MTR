@@ -45,6 +45,8 @@ public class TrainServer extends Train {
 	 * after it, but not in between, and a marker that disappears halfway is worse than one that never appeared.
 	 */
 	private boolean predictedStabling;
+	/** When {@link #predictedStabling} was last worked out, so that it is not worked out again on the next tick. */
+	private long predictedStablingAt;
 	private SignalBlocks signalBlocks;
 	private List<Map<UUID, Long>> trainPositions;
 	private Map<Player, Set<TrainServer>> trainsInPlayerRange = new HashMap<>();
@@ -644,7 +646,15 @@ public class TrainServer extends Train {
 			return true;
 		}
 		if (!isOnRoute) {
-			predictedStabling = willStableAfterNextLap(nextDepartureTicks);
+			// Not on every tick. Answering this walks the depot's timetable looking for a departure this vehicle
+			// could be back for, and a day of five-minute headways is a few hundred entries to walk. The answer is
+			// about a lap that has not started, measured in minutes, so a second-old answer is the same answer --
+			// and a vehicle standing in a siding is the case where it is asked most and changes least.
+			final long now = System.currentTimeMillis();
+			if (now - predictedStablingAt >= PREDICTION_INTERVAL_MILLIS) {
+				predictedStablingAt = now;
+				predictedStabling = willStableAfterNextLap(nextDepartureTicks);
+			}
 		}
 		// Between leaving the siding and pulling away from the origin the question cannot be asked again -- the
 		// vehicle is out, so there is no siding departure to reason from, and the real decision has not been taken
@@ -653,6 +663,9 @@ public class TrainServer extends Train {
 		// is the same fault as before with the moment shifted.
 		return !predictedStabling;
 	}
+
+	/** How often the siding's answer is worked out again. Far shorter than anything it can change in. */
+	private static final long PREDICTION_INTERVAL_MILLIS = 1000;
 
 	/**
 	 * Whether a train still standing in a siding is already booked to stable at the end of the lap it has not begun.
@@ -965,7 +978,13 @@ public class TrainServer extends Train {
 			boolean secondRound = false;
 			Runnable addSchedule = null;
 			routeId = 0;
-			for (int i = startingIndex; i < timeSegments.size() + (projectsRepeat(nextDepartureTicks) ? timeSegments.size() : 0); i++) {
+			// Asked once. It was being asked in the loop condition, which is re-read on every pass, and again for
+			// every platform on the way round -- and answering it walks the depot's timetable looking for a
+			// departure this vehicle could be back for, which is not a cheap walk. One vehicle standing in a siding
+			// was doing that a few hundred times a tick, every tick, and a depot full of them put the server at
+			// 28ms a tick with nobody playing.
+			final boolean projectsRepeat = projectsRepeat(nextDepartureTicks);
+			for (int i = startingIndex; i < timeSegments.size() + (projectsRepeat ? timeSegments.size() : 0); i++) {
 				final Siding.TimeSegment timeSegment = timeSegments.get(i % timeSegments.size());
 
 				if (timeSegment.savedRailBaseId != 0) {
@@ -993,7 +1012,7 @@ public class TrainServer extends Train {
 						// see a hold, so without this the display counts down to a train that is not coming.
 						final long arrivalMillis = currentMillis + (long) ((timeSegment.endTime + offsetTime - currentTime + heldTicks) * Depot.MILLIS_PER_TICK);
 						addSchedule = () -> schedulesForPlatform.get(platformId).add(new ScheduleEntry(arrivalMillis, trainCars, timeSegment.routeId, timeSegment.currentStationIndex));
-						if (!projectsRepeat(nextDepartureTicks)) {
+						if (!projectsRepeat) {
 							addSchedule.run();
 							addSchedule = null;
 						}
