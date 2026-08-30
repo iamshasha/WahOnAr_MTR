@@ -38,6 +38,13 @@ public class TrainServer extends Train {
 	private boolean wasHoldingAtOrigin;
 	/** Whether this lap's stabling question has already been answered, so it is answered once and stays answered. */
 	private boolean stablingDecided;
+	/**
+	 * The answer worked out in the siding, kept until the real decision replaces it.
+	 *
+	 * Only the projected schedule reads this. It exists because the question can be answered before departure and
+	 * after it, but not in between, and a marker that disappears halfway is worse than one that never appeared.
+	 */
+	private boolean predictedStabling;
 	private SignalBlocks signalBlocks;
 	private List<Map<UUID, Long>> trainPositions;
 	private Map<Player, Set<TrainServer>> trainsInPlayerRange = new HashMap<>();
@@ -628,7 +635,23 @@ public class TrainServer extends Train {
 	 * the real decision as the train leaves the origin.
 	 */
 	private boolean projectsRepeat(int nextDepartureTicks) {
-		return isRepeat() && !willStableAfterNextLap(nextDepartureTicks);
+		if (!isRepeat()) {
+			// The real decision has been taken and it is to stable
+			return false;
+		}
+		if (stablingDecided) {
+			// The real decision has been taken and it is to keep going round
+			return true;
+		}
+		if (!isOnRoute) {
+			predictedStabling = willStableAfterNextLap(nextDepartureTicks);
+		}
+		// Between leaving the siding and pulling away from the origin the question cannot be asked again -- the
+		// vehicle is out, so there is no siding departure to reason from, and the real decision has not been taken
+		// yet. Holding on to the answer from the siding is what keeps the boards saying one thing throughout. Ask
+		// it fresh each tick and the marker appears in the siding and vanishes the moment the vehicle moves, which
+		// is the same fault as before with the moment shifted.
+		return !predictedStabling;
 	}
 
 	/**
@@ -637,6 +660,10 @@ public class TrainServer extends Train {
 	 * Answered the same way {@link #decideStabling} answers it, one lap earlier: take the departure it is waiting
 	 * for, add the lap and the stop it makes at the origin, and see whether there is a departure it could still be
 	 * back for. Nothing here is claimed -- the claim belongs to whichever train is actually released.
+	 *
+	 * A true answer is what puts the origin's own name on the boards, because a vehicle that stables runs its path
+	 * once and the last thing on that path is its arrival back where it started. That is the whole marker: a run
+	 * showing the far terminus is one that carries on, and a run showing the origin is the one that goes home.
 	 */
 	private boolean willStableAfterNextLap(int nextDepartureTicks) {
 		if (isOnRoute || currentDepot == null || !currentDepot.strictTimetable
