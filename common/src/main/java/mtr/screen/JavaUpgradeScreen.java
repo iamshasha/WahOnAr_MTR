@@ -24,8 +24,11 @@ import java.util.List;
  *
  * From 3.5.1 there is no way past it. The second button quits the game rather than dismissing the screen, escape
  * does nothing, and closing it puts it straight back. That is the deadline arriving: a screen that can be clicked
- * away is a screen that gets clicked away, and the version after this one does not show a screen at all -- it
- * refuses to load. Meeting the crash without having first met this would be the unkind order to do it in.
+ * away is a screen that gets clicked away.
+ *
+ * This is as far as it goes. A later version was to have refused to load at all; that is dropped, because the
+ * reason given for it -- that MTR 4 needs Java 21 -- turned out not to hold for the version this server is heading
+ * for. Asking firmly is worth it; refusing to start someone's game over it is not.
  *
  * It stops entirely the moment Java is upgraded, which is the point.
  */
