@@ -39,15 +39,10 @@ public class MTRFabricClient implements ClientModInitializer, ICustomResources {
 		ResourceManagerHelper.get(PackType.CLIENT_RESOURCES).registerReloadListener(new CustomResourcesWrapper());
 
 		if (JavaVersionNotice.upgradeNeeded()) {
-			if (JavaVersionNotice.REFUSES_TO_LOAD) {
-				// No screen at this point and nowhere to put one, so the crash report is the message
-				throw new IllegalStateException(JavaVersionNotice.refusalMessage());
-			}
-
 			// Waits for the title screen rather than showing it from here: at mod initialization there is no screen to
 			// return to, and the game is still assembling itself. It is then put back whenever anything else takes the
 			// screen, because from 3.5.1 there is no way past it -- the check stays registered for the whole session
-			// rather than firing once.
+			// rather than firing once. A screen is as far as this goes; the mod loads and runs either way.
 			ClientTickEvents.END_CLIENT_TICK.register(new ClientTickEvents.EndTick() {
 
 				private boolean announced;
@@ -59,7 +54,7 @@ public class MTRFabricClient implements ClientModInitializer, ICustomResources {
 							announced = true;
 							// Said once, so a support report can be checked against a log rather than against a
 							// memory of whether a screen appeared
-							System.out.println("MTR: " + JavaVersionNotice.refusalMessage());
+							System.out.println("MTR: " + JavaVersionNotice.noticeMessage());
 						}
 						minecraft.setScreen(new JavaUpgradeScreen());
 					}

@@ -8,18 +8,21 @@ package mtr;
  * the upgrade can be done today, long before anything depends on it. Doing it early also means the migration day
  * itself is only about the world, not about anyone's launcher.
  *
- * The deadline was announced in 3.5.0 and lands here. Three steps, deliberately:
+ * The deadline was announced in 3.5.0 and lands in 3.5.1: the screen has no way past it, but the game still
+ * starts, the screen still explains itself, and the guide is one click away. Someone who reads it can act on it in
+ * the launcher they already have open.
  *
- * <ul>
- * <li>3.5.0 said it and let the game start. A notice with nothing behind it, so it could be ignored.</li>
- * <li>3.5.1 says it and stops. The screen has no way past it, which is the whole point -- but the game still
- * starts, the screen still explains itself, and the guide is one click away. Someone who reads it can act on it
- * in the launcher they already have open.</li>
- * <li>3.5.2 refuses to load, with a crash report and no screen. By then the notice has been shown for three
- * releases and there is nothing left to explain.</li>
- * </ul>
+ * A third step was planned, where the mod would refuse to load at all. It is not going to happen, and the code for
+ * it has been taken out rather than left behind a flag.
  *
- * Stepping it that way means nobody meets the crash without having first met the screen.
+ * The reason is that the premise was wrong. This was written believing MTR 4's simulation engine needed Java 21,
+ * so that a client on 17 would meet a mod that could not load whatever anyone did. The engine actually vendored
+ * with MTR 4.0.6 is Java 8 bytecode throughout -- upstream caps its own build at 17 -- so nothing in the version
+ * this server is heading for requires 21 at all. Refusing to start someone's game is only defensible when the
+ * alternative is a game that would not have worked anyway, and that is not the situation.
+ *
+ * The screen stays. Moving to 21 early is still worth doing and costs nothing: 1.19.4 and Fabric both run on it,
+ * and it is one less thing to vary on migration day. But it is worth a screen, not a crash.
  */
 public interface JavaVersionNotice {
 
@@ -33,14 +36,6 @@ public interface JavaVersionNotice {
 	 */
 	boolean BLOCKS_LAUNCH = true;
 
-	/**
-	 * Whether the mod refuses to load at all rather than showing anything.
-	 *
-	 * Set from 3.5.2. Kept as a flag beside {@link #BLOCKS_LAUNCH} so the two states are one line apart and the
-	 * order they arrive in is readable from here, rather than being spread across a version comparison.
-	 */
-	boolean REFUSES_TO_LOAD = false;
-
 	/** Says how to change it, for anyone who has never had to. Printed as well as linked, so it can be read anywhere. */
 	String GUIDE_URL = "https://srn.netartisan.site/mtr-manual/java-update";
 
@@ -53,14 +48,9 @@ public interface JavaVersionNotice {
 		return String.valueOf(Runtime.version().feature());
 	}
 
-	/**
-	 * What a crash report says when the mod will not load, which is the only place it can be said.
-	 *
-	 * There is no screen at that point and no chat, so this line has to carry the version, the requirement and the
-	 * guide on its own.
-	 */
-	static String refusalMessage() {
-		return "Minecraft Transit Railway requires Java " + REQUIRED_FOR_MTR_4 + " or newer. This game is running Java "
+	/** What the log says once, per session, when the screen goes up. */
+	static String noticeMessage() {
+		return "Minecraft Transit Railway asks for Java " + REQUIRED_FOR_MTR_4 + " or newer. This game is running Java "
 				+ currentVersion() + ". Change your Java version in your launcher -- see " + GUIDE_URL;
 	}
 }
