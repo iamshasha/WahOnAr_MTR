@@ -1,5 +1,7 @@
 package mtr.block;
 
+import mtr.mappings.BlockColor;
+import mtr.mappings.BlockProperties;
 import mtr.BlockEntityTypes;
 import mtr.data.RailAngle;
 import mtr.data.RailwayData;
@@ -29,8 +31,6 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.StateDefinition;
 import net.minecraft.world.level.block.state.properties.BooleanProperty;
 import net.minecraft.world.level.material.Fluids;
-import net.minecraft.world.level.material.Material;
-import net.minecraft.world.level.material.MaterialColor;
 import net.minecraft.world.level.material.PushReaction;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.Shapes;
@@ -48,7 +48,7 @@ public class BlockNode extends BlockDirectionalMapper {
 	public static final BooleanProperty IS_CONNECTED = BooleanProperty.create("is_connected");
 
 	public BlockNode(TransportMode transportMode) {
-		super(BlockBehaviour.Properties.of(Material.METAL, MaterialColor.COLOR_GRAY).strength(2).noOcclusion());
+		super(BlockProperties.metal(BlockColor.COLOR_GRAY).strength(2).noOcclusion());
 		this.transportMode = transportMode;
 		registerDefaultState(defaultBlockState().setValue(FACING, false).setValue(IS_22_5, false).setValue(IS_45, false));
 	}

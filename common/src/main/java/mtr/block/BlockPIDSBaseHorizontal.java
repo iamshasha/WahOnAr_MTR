@@ -1,5 +1,7 @@
 package mtr.block;
 
+import mtr.mappings.BlockColor;
+import mtr.mappings.BlockProperties;
 import mtr.data.IPIDS;
 import mtr.mappings.BlockDirectionalMapper;
 import mtr.mappings.EntityBlockMapper;
@@ -27,8 +29,6 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.StateDefinition;
-import net.minecraft.world.level.material.Material;
-import net.minecraft.world.level.material.MaterialColor;
 import net.minecraft.world.level.material.PushReaction;
 import net.minecraft.world.phys.BlockHitResult;
 
@@ -37,7 +37,7 @@ import java.util.List;
 public abstract class BlockPIDSBaseHorizontal extends BlockDirectionalMapper implements EntityBlockMapper, IPIDS {
 
 	public BlockPIDSBaseHorizontal() {
-		super(Properties.of(Material.METAL, MaterialColor.COLOR_GRAY).requiresCorrectToolForDrops().strength(2).lightLevel(state -> 5));
+		super(BlockProperties.metal(BlockColor.COLOR_GRAY).requiresCorrectToolForDrops().strength(2).lightLevel(state -> 5));
 	}
 
 	@Override

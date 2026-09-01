@@ -57,3 +57,6 @@ forge/server
 # enviromental variable
 .env
 tools/__pycache__/
+
+# Generated per Minecraft version from common/src/main/blockproperties
+common/src/main/java/mtr/mappings/BlockProperties.java

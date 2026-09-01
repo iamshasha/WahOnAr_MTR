@@ -1,5 +1,7 @@
 package mtr.block;
 
+import mtr.mappings.BlockColor;
+import mtr.mappings.BlockProperties;
 import mtr.Items;
 import mtr.mappings.HorizontalBlockWithSoftLanding;
 import mtr.mappings.Utilities;
@@ -17,8 +19,6 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.Rotation;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.EnumProperty;
-import net.minecraft.world.level.material.Material;
-import net.minecraft.world.level.material.MaterialColor;
 import net.minecraft.world.level.material.PushReaction;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.Shapes;
@@ -29,7 +29,7 @@ public abstract class BlockEscalatorBase extends HorizontalBlockWithSoftLanding 
 	public static final EnumProperty<EnumEscalatorOrientation> ORIENTATION = EnumProperty.create("orientation", EnumEscalatorOrientation.class);
 
 	protected BlockEscalatorBase() {
-		super(Properties.of(Material.METAL, MaterialColor.COLOR_GRAY).requiresCorrectToolForDrops().strength(2).noOcclusion());
+		super(BlockProperties.metal(BlockColor.COLOR_GRAY).requiresCorrectToolForDrops().strength(2).noOcclusion());
 	}
 
 	@Override

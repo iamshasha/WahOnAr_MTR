@@ -1,5 +1,7 @@
 package mtr.block;
 
+import mtr.mappings.BlockColor;
+import mtr.mappings.BlockProperties;
 import mtr.data.IPIDSRenderChild;
 import mtr.mappings.BlockDirectionalMapper;
 import mtr.mappings.BlockEntityClientSerializableMapper;
@@ -20,8 +22,6 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.StateDefinition;
-import net.minecraft.world.level.material.Material;
-import net.minecraft.world.level.material.MaterialColor;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.VoxelShape;
@@ -33,7 +33,7 @@ import java.util.Set;
 public abstract class BlockArrivalProjectorBase extends BlockDirectionalMapper implements EntityBlockMapper {
 
 	public BlockArrivalProjectorBase() {
-		super(Properties.of(Material.METAL, MaterialColor.COLOR_GRAY).requiresCorrectToolForDrops().strength(2).lightLevel(state -> 5).noOcclusion());
+		super(BlockProperties.metal(BlockColor.COLOR_GRAY).requiresCorrectToolForDrops().strength(2).lightLevel(state -> 5).noOcclusion());
 	}
 
 	@Override

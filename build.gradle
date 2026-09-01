@@ -22,7 +22,32 @@ def pinned = { String property, String fallback ->
 	rootProject.properties.containsKey(property) ? rootProject.getProperties().get(property).toString() : fallback
 }
 
-def parchment_version = pinned("parchmentVersion", "2023.06.25")
+/**
+ * The pinned dependency set for each Minecraft version this mod is built for.
+ *
+ * A pin is only meaningful against the game it was chosen for: 0.87.2+1.19.4 is not a fabric-api that exists for
+ * 1.20.1, and asking for it there is not a near miss but a build that cannot resolve. Keeping a set per version
+ * means adding a version is adding a row, and that neither line silently borrows the other's numbers.
+ *
+ * Every number here is what the clients for that version actually run, taken from the launcher instance rather
+ * than from whatever was newest on the day. Override one at a time with -P for a deliberate test.
+ */
+def pinsPerMinecraftVersion = [
+		"1.19.4": [loader: "0.19.2", fabricApi: "0.87.2+1.19.4", modMenu: "6.3.1", architectury: "8.2.91+forge", parchment: "2023.06.25"],
+		// fabric-api is deliberately not the newest here. 0.92.x is what the clients run, but its recent builds carry a
+		// mixin remap type that this Loom refuses to read, and a newer Loom needs a newer Gradle than the wrapper --
+		// which 1.19.4 also builds with. The API surface this mod uses has not moved since 0.86, and what the client
+		// loads at runtime is its own copy either way.
+		"1.20.1": [loader: "0.19.3", fabricApi: "0.86.1+1.20.1", modMenu: "7.2.2", architectury: "9.2.14+forge", parchment: "2023.09.03"],
+]
+def pins = pinsPerMinecraftVersion[minecraft_version]
+if (pins == null) {
+	throw new GradleException("No pinned dependency set for Minecraft " + minecraft_version + ". Add one to "
+			+ "pinsPerMinecraftVersion in build.gradle, using the versions the clients for it actually run, "
+			+ "rather than letting the build pick.")
+}
+
+def parchment_version = pinned("parchmentVersion", pins.parchment)
 def testServer = rootProject.properties.containsKey("testServer") ? rootProject.getProperties().get("testServer").toString() : ""
 
 
@@ -33,12 +58,12 @@ def testServer = rootProject.properties.containsKey("testServer") ? rootProject.
 // straight to AnnotationNode. Every client crashed before the main menu, on source that had not changed.
 // Build against the loader we ship on; a newer loader can read the old shape, but not the reverse.
 // Override with -PfabricLoaderVersion=... to test against a different one on purpose.
-rootProject.ext.fabric_loader_version = [minecraft_version, rootProject.properties.containsKey("fabricLoaderVersion") ? rootProject.getProperties().get("fabricLoaderVersion").toString() : "0.19.2"]
-rootProject.ext.fabric_api_data = getModrinthData("fabric", minecraft_version, "fabric-api", pinned("fabricApiVersion", "0.87.2+1.19.4"))
-rootProject.ext.mod_menu_data = getModrinthData("fabric", minecraft_version, "modmenu", pinned("modMenuVersion", "6.3.1"))
+rootProject.ext.fabric_loader_version = [minecraft_version, rootProject.properties.containsKey("fabricLoaderVersion") ? rootProject.getProperties().get("fabricLoaderVersion").toString() : pins.loader]
+rootProject.ext.fabric_api_data = getModrinthData("fabric", minecraft_version, "fabric-api", pinned("fabricApiVersion", pins.fabricApi))
+rootProject.ext.mod_menu_data = getModrinthData("fabric", minecraft_version, "modmenu", pinned("modMenuVersion", pins.modMenu))
 // Forge is gone, but common/build.gradle still needs the Architectury version and this is where the listing
 // publishes it. The artifact common resolves is the loader-neutral one.
-rootProject.ext.architectury_data = getModrinthData("forge", minecraft_version, "architectury-api", pinned("architecturyVersion", "8.2.91+forge"))
+rootProject.ext.architectury_data = getModrinthData("forge", minecraft_version, "architectury-api", pinned("architecturyVersion", pins.architectury))
 
 rootProject.ext.architectury_id = minecraft_main_version == 16 ? "me.shedaniel" : "dev.architectury"
 rootProject.ext.variation = rootProject.properties.containsKey("variation") ? rootProject.getProperties().get("variation").toString() : "normal"
@@ -198,6 +223,15 @@ task setupFiles() {
 		into "common/src/main/java/mtr"
 		filter(ReplaceTokens, tokens: ["key": patreon_api_key, "version": minecraft_version + "-" + rootProject.mod_version, "lifts": rootProject.variation, "server": testServer])
 		rename "(.+)Template.java", "\$1.java"
+	}
+	// 1.20 deleted Material and renamed MaterialColor, both of which the block definitions named directly. The
+	// variant for the version being built is copied over BlockProperties so the definitions themselves can stay
+	// version-neutral, the same way UnknownPacketMixin is generated below.
+	copy {
+		outputs.upToDateWhen { false }
+		from "common/src/main/blockproperties/BlockProperties-${minecraft_main_version >= 20 ? "1.20" : "1.19"}.java"
+		into "common/src/main/java/mtr/mappings"
+		rename ".*", "BlockProperties.java"
 	}
 	copy {
 		outputs.upToDateWhen { false }

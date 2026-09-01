@@ -5,6 +5,26 @@ pluginManagement {
 		maven { url "https://maven.minecraftforge.net/" }
 		gradlePluginPortal()
 	}
+
+	// Loom is pinned per Minecraft version, for the same reason the dependency versions in build.gradle are.
+	//
+	// 1.19.4 stays on the snapshot it has always built with: that line is live, its jars are published and
+	// checksummed, and remapping is exactly the sort of thing a different Loom does differently. There is nothing
+	// to gain by moving it and a whole fleet to break by getting it wrong.
+	//
+	// Nothing overrides it today. A newer Loom is not an option while the wrapper is on Gradle 7.3.3 -- Loom 1.7
+	// wants Gradle 8.8 -- and moving the wrapper would move it for 1.19.4 as well, which is the one thing worth
+	// not doing. 1.20.1 gets there instead by building against a fabric-api old enough not to carry the mixin
+	// remap type this Loom cannot read; see pinsPerMinecraftVersion in build.gradle.
+	def buildingVersion = startParameter.projectProperties.get("buildVersion") ?: "1.16.5"
+	def loomForVersion = [:]
+	resolutionStrategy {
+		eachPlugin {
+			if (requested.id.id == "dev.architectury.loom" && loomForVersion.containsKey(buildingVersion)) {
+				useVersion(loomForVersion[buildingVersion])
+			}
+		}
+	}
 }
 
 include("common")
