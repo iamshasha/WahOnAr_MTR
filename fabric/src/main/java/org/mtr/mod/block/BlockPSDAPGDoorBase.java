@@ -180,7 +180,7 @@ public abstract class BlockPSDAPGDoorBase extends BlockPSDAPGBase implements Blo
 		public void setDoorValue(double vehicleDoorValue) {
 			final BlockEntityBase blockEntityBase = getBottomBlockEntity(getWorld2(), getPos2());
 			if (blockEntityBase != null) {
-				blockEntityBase.doorValue = Utilities.clamp(vehicleDoorValue, 0, 1);
+				blockEntityBase.doorValue = Math.clamp(vehicleDoorValue, 0, 1);
 				blockEntityBase.doorTarget = 1;
 			}
 		}

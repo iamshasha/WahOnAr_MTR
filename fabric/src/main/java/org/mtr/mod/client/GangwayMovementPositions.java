@@ -49,14 +49,14 @@ public class GangwayMovementPositions {
 	}
 
 	public double getPercentageX(double x) {
-		return (Utilities.clamp(x, xMinClamped, xMaxClamped) - xMinClamped) / (xMaxClamped - xMinClamped);
+		return (Math.clamp(x, xMinClamped, xMaxClamped) - xMinClamped) / (xMaxClamped - xMinClamped);
 	}
 
 	public double getPercentageZ(double z) {
 		if (getMax) {
-			return Utilities.clamp(z - this.z, 0, 1);
+			return Math.clamp(z - this.z, 0, 1);
 		} else {
-			return Utilities.clamp(z - this.z, -1, 0) + 1;
+			return Math.clamp(z - this.z, -1, 0) + 1;
 		}
 	}
 

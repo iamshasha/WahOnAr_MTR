@@ -76,11 +76,11 @@ public final class Client extends ClientSchema {
 	}
 
 	public void setDynamicTextureResolution(int dynamicTextureResolution) {
-		this.dynamicTextureResolution = Utilities.clamp(dynamicTextureResolution, 0, DYNAMIC_RESOLUTION_COUNT);
+		this.dynamicTextureResolution = Math.clamp(dynamicTextureResolution, 0, DYNAMIC_RESOLUTION_COUNT);
 	}
 
 	public void setVehicleOscillationMultiplier(double trainOscillationMultiplier) {
-		this.vehicleOscillationMultiplier = Utilities.clamp(trainOscillationMultiplier, 0, (TRAIN_OSCILLATION_COUNT / 10.0));
+		this.vehicleOscillationMultiplier = Math.clamp(trainOscillationMultiplier, 0, (TRAIN_OSCILLATION_COUNT / 10.0));
 	}
 
 	public void toggleDefaultRail3D() {
