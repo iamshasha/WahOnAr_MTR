@@ -443,7 +443,7 @@ public class Depot extends AreaBase implements IReducedSaveData {
 						// Stamp the departure being run, not the moment the train physically left: the early
 						// moment would drag the generated timetable earlier by the lead on every dispatch
 						lastDeployedMillis = booked;
-						train.setTimetableDeparture(booked);
+						train.setTimetableDeparture(booked, this);
 					} else if (getMillisUntilDeploy(1, 0) != 0) {
 						continue;
 					} else {

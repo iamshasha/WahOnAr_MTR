@@ -24,6 +24,7 @@ public final class ServerConfig {
 
 	private static final String PRELOAD_SECONDS = "vehicle_chunk_preload_seconds";
 	private static final String PRELOAD_MAX_BLOCKS = "vehicle_chunk_preload_max_blocks";
+	private static final String DECIDE_STABLING_AT_DISPATCH = "decide_stabling_at_dispatch";
 
 	/**
 	 * How far ahead of a vehicle carrying passengers to keep the ground loaded, in seconds of running at its
@@ -36,6 +37,23 @@ public final class ServerConfig {
 	private static double preloadSeconds = 6;
 	/** Ceiling on that, so one very fast vehicle cannot ask for an unbounded stretch of map at once. */
 	private static int preloadMaxBlocks = 512;
+	/**
+	 * Whether a vehicle settles once, when it is given its departure, whether it stables at the end of that lap.
+	 *
+	 * Off is the older behaviour: the boards guess the answer while the vehicle waits in its siding, and the real
+	 * decision taken as it leaves the origin replaces the guess. The two are not derived from the same thing -- the
+	 * guess reads the timetable as it stands, the decision uses the departure it claims at that moment, and other
+	 * vehicles claim departures in between -- so for some runs they disagree, and the destination on the boards
+	 * changes as the vehicle pulls away.
+	 *
+	 * On, there is no guess. The answer is taken once for each lap, at the moment the departure for that lap is
+	 * claimed, and everything downstream reads it. One answer cannot disagree with itself.
+	 *
+	 * Defaulted off because it changes when dispatch decides things, and dispatch is worth changing carefully.
+	 * Turn it on, watch a few departures, and turn it off again if anything looks wrong -- nothing is written to
+	 * the world either way.
+	 */
+	private static boolean decideStablingAtDispatch = false;
 
 	private static boolean loaded;
 
@@ -64,6 +82,11 @@ public final class ServerConfig {
 		return preloadMaxBlocks;
 	}
 
+	public static boolean decideStablingAtDispatch() {
+		load();
+		return decideStablingAtDispatch;
+	}
+
 	private static synchronized void load() {
 		if (loaded) {
 			return;
@@ -74,6 +97,7 @@ public final class ServerConfig {
 				final JsonObject json = new JsonParser().parse(String.join("", Files.readAllLines(CONFIG_FILE_PATH, StandardCharsets.UTF_8))).getAsJsonObject();
 				preloadSeconds = readDouble(json, PRELOAD_SECONDS, preloadSeconds);
 				preloadMaxBlocks = (int) readDouble(json, PRELOAD_MAX_BLOCKS, preloadMaxBlocks);
+				decideStablingAtDispatch = readBoolean(json, DECIDE_STABLING_AT_DISPATCH, decideStablingAtDispatch);
 			}
 		} catch (Exception e) {
 			// A malformed file falls back to the defaults rather than stopping the server from starting
@@ -83,6 +107,14 @@ public final class ServerConfig {
 		preloadSeconds = Math.max(0, Math.min(60, preloadSeconds));
 		preloadMaxBlocks = Math.max(0, Math.min(4096, preloadMaxBlocks));
 		write();
+	}
+
+	private static boolean readBoolean(JsonObject json, String key, boolean fallback) {
+		try {
+			return json.get(key).getAsBoolean();
+		} catch (Exception e) {
+			return fallback;
+		}
 	}
 
 	private static double readDouble(JsonObject json, String key, double fallback) {
@@ -98,6 +130,7 @@ public final class ServerConfig {
 			final JsonObject json = new JsonObject();
 			json.addProperty(PRELOAD_SECONDS, preloadSeconds);
 			json.addProperty(PRELOAD_MAX_BLOCKS, preloadMaxBlocks);
+			json.addProperty(DECIDE_STABLING_AT_DISPATCH, decideStablingAtDispatch);
 			Files.createDirectories(CONFIG_FILE_PATH.getParent());
 			Files.write(CONFIG_FILE_PATH, RailwayData.prettyPrint(json).getBytes(StandardCharsets.UTF_8));
 		} catch (IOException e) {

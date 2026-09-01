@@ -45,6 +45,8 @@ public class TrainServer extends Train {
 	 * after it, but not in between, and a marker that disappears halfway is worse than one that never appeared.
 	 */
 	private boolean predictedStabling;
+	/** Set when the dispatch gate settled this lap's answer, cleared once the vehicle is actually running it. */
+	private boolean dispatchDecided;
 	/** When {@link #predictedStabling} was last worked out, so that it is not worked out again on the next tick. */
 	private long predictedStablingAt;
 	/** The last answer written down, so that only a change is written again. */
@@ -583,6 +585,11 @@ public class TrainServer extends Train {
 			returningToDepot = false;
 			stablingDecided = false;
 		} else if (!isOnRoute) {
+			if (dispatchDecided) {
+				// Given a departure but not yet moving. The answer for the lap about to be run is already taken,
+				// and clearing it here would put the boards back to guessing for the few ticks in between.
+				return;
+			}
 			// Back in the depot, so the decision has done its job and the normal dispatch gate takes over
 			returningToDepot = false;
 			stablingDecided = false;
@@ -655,6 +662,11 @@ public class TrainServer extends Train {
 			// The real decision has been taken and it is to keep going round
 			return true;
 		}
+		if (ServerConfig.decideStablingAtDispatch()) {
+			// Nothing to guess: the answer for this lap was settled when the departure was claimed, and isRepeat
+			// already reflects it. Guessing alongside a settled answer is what produced two answers to disagree.
+			return true;
+		}
 		if (!isOnRoute) {
 			// Not on every tick. Answering this walks the depot's timetable looking for a departure this vehicle
 			// could be back for, and a day of five-minute headways is a few hundred entries to walk. The answer is
@@ -721,6 +733,29 @@ public class TrainServer extends Train {
 	 * once and the last thing on that path is its arrival back where it started. That is the whole marker: a run
 	 * showing the far terminus is one that carries on, and a run showing the origin is the one that goes home.
 	 */
+	/**
+	 * Whether a vehicle leaving the origin on the given departure would be left standing long enough to stable.
+	 *
+	 * The one piece of arithmetic behind every version of this question, so that whoever asks it -- the dispatch
+	 * gate, the origin, or the projection -- is asking the same thing and cannot come back with a different answer.
+	 */
+	private boolean stablesAfterLapFrom(long departsAt) {
+		if (currentDepot == null || timeSegments.isEmpty() || departsAt < 0) {
+			return false;
+		}
+		// The lap measured from the origin, not from the siding. Under a strict timetable the booked departure is
+		// the moment the vehicle leaves the origin platform, so the run out to it is already behind departsAt.
+		final float wholePath = timeSegments.get(timeSegments.size() - 1).endTime;
+		final float approach = originPathTicks();
+		final float lapFromOrigin = approach >= 0 ? Math.max(0, wholePath - approach) : wholePath;
+		final long backAt = departsAt
+				+ (long) (lapFromOrigin * Depot.MILLIS_PER_TICK)
+				+ (long) (originDwellTicks() * Depot.MILLIS_PER_TICK);
+		final long next = currentDepot.peekReachableDeparture(departsAt, backAt);
+		// Nothing left it could be back for is the clearest case of all
+		return next < 0 || next - backAt > currentDepot.getStablingThresholdMillis();
+	}
+
 	private boolean willStableAfterNextLap() {
 		if (isOnRoute || currentDepot == null || !currentDepot.strictTimetable
 				|| transportMode.continuousMovement || timeSegments.isEmpty()) {
@@ -735,20 +770,7 @@ public class TrainServer extends Train {
 		if (departsAt < 0) {
 			return false;
 		}
-		// The lap measured from the origin, not from the siding. Under a strict timetable the booked departure is
-		// the moment the vehicle leaves the origin platform, so the run out to it is already behind departsAt --
-		// counting the whole path on top of that put the vehicle back later than it really gets back, which read as
-		// "cannot reach the next departure" and so as "stables". The real decision, taken at the origin from the
-		// run still ahead, then said the opposite, and the boards changed their mind at exactly that moment.
-		final float wholePath = timeSegments.get(timeSegments.size() - 1).endTime;
-		final float approach = originPathTicks();
-		final float lapFromOrigin = approach >= 0 ? Math.max(0, wholePath - approach) : wholePath;
-		final long backAt = departsAt
-				+ (long) (lapFromOrigin * Depot.MILLIS_PER_TICK)
-				+ (long) (originDwellTicks() * Depot.MILLIS_PER_TICK);
-		final long next = currentDepot.peekReachableDeparture(departsAt, backAt);
-		// Nothing left it could be back for is the clearest case of all
-		return next < 0 || next - backAt > currentDepot.getStablingThresholdMillis();
+		return stablesAfterLapFrom(departsAt);
 	}
 
 	/** The earliest this train could be standing at the origin with its stop made, ready to leave again. */
@@ -813,13 +835,17 @@ public class TrainServer extends Train {
 			wasHoldingAtOrigin = false;
 			return;
 		}
+		// Running now, so the stamp has served its purpose: a later return to the siding resets normally
+		dispatchDecided = false;
 
 		if (isAtOriginPlatform()) {
 			if (timetableDepartureMillis < 0) {
 				timetableDepartureMillis = currentDepot.findDeparture(System.currentTimeMillis(), true);
 			}
 			if (!wasHoldingAtOrigin) {
-				// Arriving at the origin opens a new lap, and a new lap gets its own decision
+				// Arriving at the origin opens a new lap, and a new lap gets its own decision. A repeating vehicle
+				// never goes back to a siding, so this is its dispatch: the same single answer, taken in the only
+				// other place it can be.
 				stablingDecided = false;
 			}
 			wasHoldingAtOrigin = true;
@@ -1210,9 +1236,18 @@ public class TrainServer extends Train {
 	}
 
 	/** Called by the dispatch gate with the wall clock time of the departure this run is booked against. */
-	public void setTimetableDeparture(long departureMillis) {
+	public void setTimetableDeparture(long departureMillis, Depot depot) {
 		timetableDepartureMillis = departureMillis;
 		wasHoldingAtOrigin = false;
+		if (ServerConfig.decideStablingAtDispatch()) {
+			// Settled here, where the departure for this lap is known and claimed, rather than guessed in the
+			// siding and settled again at the origin. currentDepot is not set until the vehicle is simulated, and
+			// this runs before that, so the gate hands its own depot in.
+			currentDepot = depot;
+			returningToDepot = stablesAfterLapFrom(departureMillis);
+			stablingDecided = true;
+			dispatchDecided = true;
+		}
 	}
 
 	private int getNextStoppingIndex() {
