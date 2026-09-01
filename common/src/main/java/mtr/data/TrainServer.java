@@ -835,20 +835,27 @@ public class TrainServer extends Train {
 			wasHoldingAtOrigin = false;
 			return;
 		}
-		// Running now, so the stamp has served its purpose: a later return to the siding resets normally
-		dispatchDecided = false;
 
 		if (isAtOriginPlatform()) {
 			if (timetableDepartureMillis < 0) {
 				timetableDepartureMillis = currentDepot.findDeparture(System.currentTimeMillis(), true);
 			}
-			if (!wasHoldingAtOrigin) {
+			if (!wasHoldingAtOrigin && !dispatchDecided) {
 				// Arriving at the origin opens a new lap, and a new lap gets its own decision. A repeating vehicle
 				// never goes back to a siding, so this is its dispatch: the same single answer, taken in the only
 				// other place it can be.
+				//
+				// Except on the way out of a siding. That first arrival is part of the lap the gate has already
+				// settled, so opening a new decision here would throw away the answer given a moment ago and take
+				// it again -- which is the very thing this setting exists to stop.
 				stablingDecided = false;
 			}
 			wasHoldingAtOrigin = true;
+		} else if (wasHoldingAtOrigin && dispatchDecided) {
+			// Leaving the origin on a lap the gate settled. Not a new decision; the stamp has now done its work
+			// and the next arrival opens the next lap in the ordinary way.
+			wasHoldingAtOrigin = false;
+			dispatchDecided = false;
 		} else if (wasHoldingAtOrigin && !stablingDecided) {
 			// Once per lap, and only once. Leaving the origin is not a single event: the predicate behind it goes
 			// false whenever the vehicle is judged to be off the platform, and a vehicle easing out past a signal
