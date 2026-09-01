@@ -639,14 +639,14 @@ public class TrainServer extends Train {
 	 * nothing about what the train does: no departure is claimed, no route is altered, and the answer is replaced by
 	 * the real decision as the train leaves the origin.
 	 */
-	private boolean projectsRepeat(int nextDepartureTicks) {
-		final boolean repeating = decideProjection(nextDepartureTicks);
+	private boolean projectsRepeat() {
+		final boolean repeating = decideProjection();
 		reportProjection(repeating);
 		return repeating;
 	}
 
 	/** The answer itself, kept apart only so that {@link #reportProjection} sees every path out of it. */
-	private boolean decideProjection(int nextDepartureTicks) {
+	private boolean decideProjection() {
 		if (!isRepeat()) {
 			// The real decision has been taken and it is to stable
 			return false;
@@ -669,7 +669,7 @@ public class TrainServer extends Train {
 				predictedStablingAt = now - Math.floorMod(id, PREDICTION_INTERVAL_MILLIS);
 			} else if (now - predictedStablingAt >= PREDICTION_INTERVAL_MILLIS) {
 				predictedStablingAt = now;
-				predictedStabling = willStableAfterNextLap(nextDepartureTicks);
+				predictedStabling = willStableAfterNextLap();
 			}
 		}
 		// Between leaving the siding and pulling away from the origin the question cannot be asked again -- the
@@ -721,12 +721,20 @@ public class TrainServer extends Train {
 	 * once and the last thing on that path is its arrival back where it started. That is the whole marker: a run
 	 * showing the far terminus is one that carries on, and a run showing the origin is the one that goes home.
 	 */
-	private boolean willStableAfterNextLap(int nextDepartureTicks) {
+	private boolean willStableAfterNextLap() {
 		if (isOnRoute || currentDepot == null || !currentDepot.strictTimetable
-				|| transportMode.continuousMovement || nextDepartureTicks < 0 || timeSegments.isEmpty()) {
+				|| transportMode.continuousMovement || timeSegments.isEmpty()) {
 			return false;
 		}
-		final long departsAt = System.currentTimeMillis() + Math.max(0, nextDepartureTicks);
+		// Read from the timetable, not from the dispatch gate. getNextUnclaimedDepartureMillis advances a counter
+		// every time it is called, so that several sidings asking in the same tick name different departures --
+		// which is right for dispatch and useless as the basis of a question. Asking it once a second handed this
+		// a different departure each time, so the answer flipped between one lap and two while the vehicle stood
+		// still, and the boards flickered with it. findDeparture is a plain lookup: same clock, same answer.
+		final long departsAt = currentDepot.findDeparture(System.currentTimeMillis(), true);
+		if (departsAt < 0) {
+			return false;
+		}
 		// The lap measured from the origin, not from the siding. Under a strict timetable the booked departure is
 		// the moment the vehicle leaves the origin platform, so the run out to it is already behind departsAt --
 		// counting the whole path on top of that put the vehicle back later than it really gets back, which read as
@@ -810,8 +818,17 @@ public class TrainServer extends Train {
 			if (timetableDepartureMillis < 0) {
 				timetableDepartureMillis = currentDepot.findDeparture(System.currentTimeMillis(), true);
 			}
+			if (!wasHoldingAtOrigin) {
+				// Arriving at the origin opens a new lap, and a new lap gets its own decision
+				stablingDecided = false;
+			}
 			wasHoldingAtOrigin = true;
-		} else if (wasHoldingAtOrigin) {
+		} else if (wasHoldingAtOrigin && !stablingDecided) {
+			// Once per lap, and only once. Leaving the origin is not a single event: the predicate behind it goes
+			// false whenever the vehicle is judged to be off the platform, and a vehicle easing out past a signal
+			// can cross that line more than once. Every crossing used to claim another departure and take the
+			// decision again, so a vehicle could hold several departures nobody ran, and answer the same question
+			// two opposite ways within a few ticks at the same position -- which is what the boards were showing.
 			wasHoldingAtOrigin = false;
 			final float remainingTicks = remainingRunTicks();
 			if (timetableDepartureMillis >= 0) {
@@ -825,6 +842,9 @@ public class TrainServer extends Train {
 			// Pulling away from the origin with the next departure now known, which is the earliest the question
 			// can be answered and the last moment it can be answered without having already lied about it.
 			decideStabling(remainingTicks);
+		} else if (wasHoldingAtOrigin) {
+			// Already answered for this lap; just note that the platform is behind us
+			wasHoldingAtOrigin = false;
 		}
 	}
 
@@ -1034,7 +1054,7 @@ public class TrainServer extends Train {
 			// departure this vehicle could be back for, which is not a cheap walk. One vehicle standing in a siding
 			// was doing that a few hundred times a tick, every tick, and a depot full of them put the server at
 			// 28ms a tick with nobody playing.
-			final boolean projectsRepeat = projectsRepeat(nextDepartureTicks);
+			final boolean projectsRepeat = projectsRepeat();
 			for (int i = startingIndex; i < timeSegments.size() + (projectsRepeat ? timeSegments.size() : 0); i++) {
 				final Siding.TimeSegment timeSegment = timeSegments.get(i % timeSegments.size());
 
